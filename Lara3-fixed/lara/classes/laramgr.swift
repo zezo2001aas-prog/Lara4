@@ -215,17 +215,54 @@ final class laramgr: ObservableObject {
     // primitive, reviveKRW() clears the latch and the next op self-heals.
 
     /// Attempt to recover a transiently-degraded KRW session without re-exploit.
+    /// 3-stage recovery: quick check → health score → retry with delay.
     /// Returns true if the primitive is healthy (or was revived).
     @discardableResult
     func reviveKRW() -> Bool {
         guard dsready else { return false }
+
+        // Stage 1: Quick fd + corruption check
         let ok = ds_revive()
         if ok {
             logmsg("(krw) session healthy — revived")
-        } else {
-            logmsg("(krw) revive failed — control socket is gone, re-run exploit")
+            return true
         }
-        return ok
+
+        // Stage 2: Check health score for partial degradation
+        logmsg("(krw) quick revive failed — checking health score...")
+        let health = ds_session_health_score()
+        logmsg("(krw) health score: \(health)/100")
+
+        if health > 0 {
+            // fd alive but corruption degraded — wait and retry
+            logmsg("(krw) attempting delayed retry (500ms)...")
+            usleep(500_000)
+            let retryOk = ds_revive()
+            if retryOk {
+                logmsg("(krw) recovered after delayed retry")
+                return true
+            }
+        }
+
+        logmsg("(krw) session unrecoverable — needs re-exploit")
+        return false
+    }
+
+    /// Automatic session health check with recovery attempt.
+    /// Call this periodically (e.g., every 30 seconds) from a timer.
+    @discardableResult
+    func autoHealthCheck() -> Bool {
+        guard dsready else { return false }
+        let health = ds_session_health_score()
+        if health >= 80 {
+            return true  // Healthy
+        } else if health >= 30 {
+            logmsg("(health) degraded (\(health)/100) — attempting auto-revive")
+            return reviveKRW()
+        } else {
+            logmsg("(health) CRITICAL (\(health)/100) — needs re-exploit")
+            return false
+        }
     }
 
     /// Full re-exploit. Resets the broken latch and re-runs darksword.

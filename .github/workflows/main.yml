@@ -1,0 +1,89 @@
+name: build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: setup xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: show xcode version
+        run: xcodebuild -version
+
+      - name: install ldid
+        run: brew install ldid
+
+      - name: build IPA
+        working-directory: lara3_full/Lara3-main
+        run: |
+          chmod +x ipabuild.sh
+          ./ipabuild.sh
+
+      - name: verify IPA
+        working-directory: lara3_full/Lara3-main
+        run: |
+          ls -lh build/lara.ipa
+          unzip -p build/lara.ipa Payload/lara.app/lara > /tmp/lara_bin
+          ldid -e /tmp/lara_bin | grep -E "no-sandbox|proc_info|platform-application" || true
+
+      - name: upload xcodebuild log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: lara3_full/Lara3-main/build/xcodebuild.log
+          if-no-files-found: ignore
+
+      - name: upload IPA
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lara4-ipa
+          path: lara3_full/Lara3-main/build/lara.ipa
+
+  release:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: download IPA
+        uses: actions/download-artifact@v4
+        with:
+          name: lara4-ipa
+          path: build/
+
+      - name: update nightly release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          COMMITS=$(git log -5 --pretty=format:'- %h %s (%an)')
+          gh release view nightly >/dev/null 2>&1 || \
+            gh release create nightly --title 'Nightly' --notes 'nightly' --prerelease
+          gh release edit nightly \
+            --title "Nightly ($(date -u '+%Y-%m-%d %H:%M UTC'))" \
+            --notes "$(printf '## Lara4 Nightly\n\n%s' "$COMMITS")" \
+            --prerelease
+          gh release upload nightly build/lara.ipa --clobber

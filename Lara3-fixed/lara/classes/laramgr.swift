@@ -209,15 +209,6 @@ final class laramgr: ObservableObject {
           }
       }
     
-    // ── Session health ───────────────────────────────────────────────────────
-    // ds_is_ready() is now a LIVE probe (not a permanent latch), so these guards
-    // reflect the socket's real state. If a transient failure degraded the
-    // primitive, reviveKRW() clears the latch and the next op self-heals.
-
-    /// Attempt to recover a transiently-degraded KRW session without re-exploit.
-    /// 3-stage recovery: quick check → health score → retry with delay.
-    /// Returns true if the primitive is healthy (or was revived).
-    @discardableResult
         // MARK: - Session Health (FIX 6)
       // FIX 6: Invalidate health timer when app enters background — prevents
       // ds_revive() socket() syscalls while suspended (kernel rejects them →

@@ -37,19 +37,18 @@ private func _kreadCStrK(_ addr: UInt64, max: Int = 128) -> String {
 // MARK: – vnode-info
 
 private func _vnodeInfo(path: String) -> String? {
-    let rootVnode = getrootvnode()
     guard rootVnode != 0 else { return nil }
 
     let targetVnode = (path == "/") ? rootVnode : rootVnode
 
-    let v_usecount = _kread32K(targetVnode + UInt64(numericCast(off_vnode_v_usecount)))
-    let v_iocount  = _kread32K(targetVnode + UInt64(numericCast(off_vnode_v_iocount)))
-    let v_writecount = _kread32K(targetVnode + UInt64(numericCast(off_vnode_v_writecount)))
-    let v_flag     = _kread32K(targetVnode + UInt64(numericCast(off_vnode_v_flag)))
-    let v_mount    = _kreadPtrK(targetVnode + UInt64(numericCast(off_vnode_v_mount)))
-    let v_name     = _kreadCStrK(targetVnode + UInt64(numericCast(off_vnode_v_name)))
-    let v_parent   = _kreadPtrK(targetVnode + UInt64(numericCast(off_vnode_v_parent)))
-    let v_data     = _kreadPtrK(targetVnode + UInt64(numericCast(off_vnode_v_data)))
+    let v_usecount = _kread32K(targetVnode + vnodeVUsecountOff)
+    let v_iocount  = _kread32K(targetVnode + vnodeVIocountOff)
+    let v_writecount = _kread32K(targetVnode + vnodeVWritecountOff)
+    let v_flag     = _kread32K(targetVnode + vnodeVFlagOff)
+    let v_mount    = _kreadPtrK(targetVnode + vnodeVMountOff)
+    let v_name     = _kreadCStrK(targetVnode + vnodeVNameOff)
+    let v_parent   = _kreadPtrK(targetVnode + vnodeVParentOff)
+    let v_data     = _kreadPtrK(targetVnode + vnodeVDataOff)
 
     var flags: [String] = []
     if (v_flag & 0x0001) != 0 { flags.append("VROOT") }
@@ -87,13 +86,12 @@ private func _vnodeInfo(path: String) -> String? {
 // MARK: – mount-info
 
 private func _mountInfo() -> String? {
-    let rootVnode = getrootvnode()
     guard rootVnode != 0 else { return nil }
 
-    let v_mount = _kreadPtrK(rootVnode + UInt64(numericCast(off_vnode_v_mount)))
+    let v_mount = _kreadPtrK(rootVnode + vnodeVMountOff)
     guard v_mount != 0 else { return nil }
 
-    let mnt_flag = _kread32K(v_mount + UInt64(numericCast(off_mount_mnt_flag)))
+    let mnt_flag = _kread32K(v_mount + mountMntFlagOff)
 
     var flags: [String] = []
     if (mnt_flag & 0x00000001) != 0 { flags.append("MNT_RDONLY") }

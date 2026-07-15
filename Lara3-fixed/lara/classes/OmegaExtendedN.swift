@@ -57,25 +57,24 @@ private func _kread64N(_ addr: UInt64) -> UInt64 {
 // MARK: – snapshot kernel
 
 private func _snapshotKernel() -> String? {
-    let ourProc = ds_get_our_proc()
     guard ourProc != 0 else { return nil }
 
-    let procRo = _kreadPtrN(ourProc + UInt64(numericCast(off_proc_p_proc_ro)))
-    let taskPtr = _kreadPtrN(procRo + UInt64(numericCast(off_proc_ro_pr_task)))
-    let ucredPtr = _kreadPtrN(procRo + UInt64(numericCast(off_proc_ro_p_ucred)))
-    let vmMapPtr = _kreadPtrN(taskPtr + UInt64(numericCast(off_task_map)))
+    let procRo = _kreadPtrN(ourProc + procPProcRoOff)
+    let taskPtr = _kreadPtrN(procRo + procRoPrTaskOff)
+    let ucredPtr = _kreadPtrN(procRo + procRoPUcredOff)
+    let vmMapPtr = _kreadPtrN(taskPtr + taskMapOff)
 
     var socketAddr: UInt64 = 0
-    let fdPtr = _kreadPtrN(ourProc + UInt64(numericCast(off_proc_p_fd)))
+    let fdPtr = _kreadPtrN(ourProc + procPFdOff)
     if fdPtr != 0 {
-        let ofilesPtr = _kreadPtrN(fdPtr + UInt64(numericCast(off_filedesc_fd_ofiles)))
+        let ofilesPtr = _kreadPtrN(fdPtr + filedescFdOfilesOff)
         if ofilesPtr != 0 {
             for fd in 0..<32 {
                 let fileprocPtr = _kreadPtrN(ofilesPtr + UInt64(fd) * 8)
                 if fileprocPtr != 0 {
-                    let fileglobPtr = _kreadPtrN(fileprocPtr + UInt64(numericCast(off_fileproc_fp_glob)))
+                    let fileglobPtr = _kreadPtrN(fileprocPtr + fileprocFpGlobOff)
                     if fileglobPtr != 0 {
-                        let fg_data = _kreadPtrN(fileglobPtr + UInt64(numericCast(off_fileglob_fg_data)))
+                        let fg_data = _kreadPtrN(fileglobPtr + fileglobFgDataOff)
                         if fg_data != 0 {
                             let so_type = ds_kread32(fg_data + 0x04)
                             if so_type >= 1 && so_type <= 10 { socketAddr = fg_data; break }
@@ -138,22 +137,22 @@ private func _snapshotDiff() -> String? {
     let ourProc = ds_get_our_proc()
     guard ourProc != 0 else { return nil }
 
-    let procRo = _kreadPtrN(ourProc + UInt64(numericCast(off_proc_p_proc_ro)))
-    let taskPtr = _kreadPtrN(procRo + UInt64(numericCast(off_proc_ro_pr_task)))
-    let ucredPtr = _kreadPtrN(procRo + UInt64(numericCast(off_proc_ro_p_ucred)))
-    let vmMapPtr = _kreadPtrN(taskPtr + UInt64(numericCast(off_task_map)))
+    let procRo = _kreadPtrN(ourProc + UInt64(off_proc_p_proc_ro))
+    let taskPtr = _kreadPtrN(procRo + UInt64(off_proc_ro_pr_task))
+    let ucredPtr = _kreadPtrN(procRo + UInt64(off_proc_ro_p_ucred))
+    let vmMapPtr = _kreadPtrN(taskPtr + UInt64(off_task_map))
 
     var socketAddr: UInt64 = 0
-    let fdPtr = _kreadPtrN(ourProc + UInt64(numericCast(off_proc_p_fd)))
+    let fdPtr = _kreadPtrN(ourProc + UInt64(off_proc_p_fd))
     if fdPtr != 0 {
-        let ofilesPtr = _kreadPtrN(fdPtr + UInt64(numericCast(off_filedesc_fd_ofiles)))
+        let ofilesPtr = _kreadPtrN(fdPtr + UInt64(off_filedesc_fd_ofiles))
         if ofilesPtr != 0 {
             for fd in 0..<32 {
                 let fileprocPtr = _kreadPtrN(ofilesPtr + UInt64(fd) * 8)
                 if fileprocPtr != 0 {
-                    let fileglobPtr = _kreadPtrN(fileprocPtr + UInt64(numericCast(off_fileproc_fp_glob)))
+                    let fileglobPtr = _kreadPtrN(fileprocPtr + UInt64(off_fileproc_fp_glob))
                     if fileglobPtr != 0 {
-                        let fg_data = _kreadPtrN(fileglobPtr + UInt64(numericCast(off_fileglob_fg_data)))
+                        let fg_data = _kreadPtrN(fileglobPtr + UInt64(off_fileglob_fg_data))
                         if fg_data != 0 {
                             let so_type = ds_kread32(fg_data + 0x04)
                             if so_type >= 1 && so_type <= 10 { socketAddr = fg_data; break }

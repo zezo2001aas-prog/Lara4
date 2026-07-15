@@ -76,6 +76,15 @@ private func _kreadCStrH(_ addr: UInt64, max: Int = 64) -> String {
 private func _fdInfo(pid: Int32, fd: Int32, mgr: laramgr) -> String? {
     guard mgr.dsready else { return nil }
 
+    let procPListLeNextOff = UInt64(off_proc_p_list_le_next)
+    let procPPidOff = UInt64(off_proc_p_pid)
+    let procPFdOff = UInt64(off_proc_p_fd)
+    let filedescFdOfilesOff = UInt64(off_filedesc_fd_ofiles)
+    let fileprocFpGlobOff = UInt64(off_fileproc_fp_glob)
+    let fileglobFgDataOff = UInt64(off_fileglob_fg_data)
+    let vnodeVUsecountOff = UInt64(off_vnode_v_usecount)
+    let vnodeVIocountOff = UInt64(off_vnode_v_iocount)
+
     let ourProc = ds_get_our_proc()
     guard ourProc != 0 else { return nil }
 
@@ -84,22 +93,22 @@ private func _fdInfo(pid: Int32, fd: Int32, mgr: laramgr) -> String? {
     var seen = Set<UInt64>()
     while ptr != 0 && !seen.contains(ptr) {
         seen.insert(ptr)
-        let p_pid = Int32(bitPattern: ds_kread32(ptr + UInt64(numericCast(off_proc_p_pid))))
+        let p_pid = Int32(bitPattern: ds_kread32(ptr + procPPidOff))
         if p_pid == pid { procPtr = ptr; break }
-        ptr = ds_kreadptr(ptr + UInt64(numericCast(off_proc_p_list_le_next)))
+        ptr = ds_kreadptr(ptr + procPListLeNextOff)
     }
     guard procPtr != 0 else { return nil }
 
-    let fdPtr = _kreadPtrH(procPtr + UInt64(numericCast(off_proc_p_fd)))
+    let fdPtr = _kreadPtrH(procPtr + procPFdOff)
     guard fdPtr != 0 else { return nil }
-    let ofilesPtr = _kreadPtrH(fdPtr + UInt64(numericCast(off_filedesc_fd_ofiles)))
+    let ofilesPtr = _kreadPtrH(fdPtr + filedescFdOfilesOff)
     guard ofilesPtr != 0 else { return nil }
     let fileprocPtr = _kreadPtrH(ofilesPtr + UInt64(fd) * 8)
     guard fileprocPtr != 0 else { return nil }
-    let fileglobPtr = _kreadPtrH(fileprocPtr + UInt64(numericCast(off_fileproc_fp_glob)))
+    let fileglobPtr = _kreadPtrH(fileprocPtr + fileprocFpGlobOff)
     guard fileglobPtr != 0 else { return nil }
     let fg_flag = _kread32H(fileglobPtr + 0x10)
-    let fg_data = _kreadPtrH(fileglobPtr + UInt64(numericCast(off_fileglob_fg_data)))
+    let fg_data = _kreadPtrH(fileglobPtr + fileglobFgDataOff)
     let fg_ops  = _kreadPtrH(fileglobPtr + 0x28)
 
     var fg_typeStr = "UNKNOWN"
@@ -108,8 +117,8 @@ private func _fdInfo(pid: Int32, fd: Int32, mgr: laramgr) -> String? {
         if so_type >= 1 && so_type <= 10 {
             fg_typeStr = "DTYPE_SOCKET"
         } else {
-            let v_usecount = _kread32H(fg_data + UInt64(numericCast(off_vnode_v_usecount)))
-            let v_iocount  = _kread32H(fg_data + UInt64(numericCast(off_vnode_v_iocount)))
+            let v_usecount = _kread32H(fg_data + vnodeVUsecountOff)
+            let v_iocount  = _kread32H(fg_data + vnodeVIocountOff)
             if v_usecount > 0 && v_usecount < 0x10000 && v_iocount > 0 && v_iocount < 0x10000 {
                 fg_typeStr = "DTYPE_VNODE"
             } else {
@@ -138,6 +147,16 @@ private func _fdInfo(pid: Int32, fd: Int32, mgr: laramgr) -> String? {
 
 private func _socketInfo(fd: Int32, mgr: laramgr) -> String? {
     guard mgr.dsready else { return nil }
+
+    let procPListLeNextOff = UInt64(off_proc_p_list_le_next)
+    let procPPidOff = UInt64(off_proc_p_pid)
+    let procPFdOff = UInt64(off_proc_p_fd)
+    let filedescFdOfilesOff = UInt64(off_filedesc_fd_ofiles)
+    let fileprocFpGlobOff = UInt64(off_fileproc_fp_glob)
+    let fileglobFgDataOff = UInt64(off_fileglob_fg_data)
+    let socketSoProtoOff = UInt64(off_socket_so_proto)
+    let socketSoUsecntOff = UInt64(off_socket_so_usecount)
+
     let ourProc = ds_get_our_proc()
     guard ourProc != 0 else { return nil }
 
@@ -147,21 +166,21 @@ private func _socketInfo(fd: Int32, mgr: laramgr) -> String? {
     let pid = getpid()
     while ptr != 0 && !seen.contains(ptr) {
         seen.insert(ptr)
-        let p_pid = Int32(bitPattern: ds_kread32(ptr + UInt64(numericCast(off_proc_p_pid))))
+        let p_pid = Int32(bitPattern: ds_kread32(ptr + procPPidOff))
         if p_pid == pid { procPtr = ptr; break }
-        ptr = ds_kreadptr(ptr + UInt64(numericCast(off_proc_p_list_le_next)))
+        ptr = ds_kreadptr(ptr + procPListLeNextOff)
     }
     guard procPtr != 0 else { return nil }
 
-    let fdPtr = _kreadPtrH(procPtr + UInt64(numericCast(off_proc_p_fd)))
+    let fdPtr = _kreadPtrH(procPtr + procPFdOff)
     guard fdPtr != 0 else { return nil }
-    let ofilesPtr = _kreadPtrH(fdPtr + UInt64(numericCast(off_filedesc_fd_ofiles)))
+    let ofilesPtr = _kreadPtrH(fdPtr + filedescFdOfilesOff)
     guard ofilesPtr != 0 else { return nil }
     let fileprocPtr = _kreadPtrH(ofilesPtr + UInt64(fd) * 8)
     guard fileprocPtr != 0 else { return nil }
-    let fileglobPtr = _kreadPtrH(fileprocPtr + UInt64(numericCast(off_fileproc_fp_glob)))
+    let fileglobPtr = _kreadPtrH(fileprocPtr + fileprocFpGlobOff)
     guard fileglobPtr != 0 else { return nil }
-    let socketAddr = _kreadPtrH(fileglobPtr + UInt64(numericCast(off_fileglob_fg_data)))
+    let socketAddr = _kreadPtrH(fileglobPtr + fileglobFgDataOff)
     guard socketAddr != 0 else { return nil }
 
     return _socketInfoFromAddr(socketAddr: socketAddr)
@@ -170,12 +189,15 @@ private func _socketInfo(fd: Int32, mgr: laramgr) -> String? {
 private func _socketInfoFromAddr(socketAddr: UInt64) -> String? {
     guard socketAddr != 0, ds_isvalid(socketAddr) else { return nil }
 
+    let socketSoProtoOff = UInt64(off_socket_so_proto)
+    let socketSoUsecntOff = UInt64(off_socket_so_usecount)
+
     let so_type     = _kread32H(socketAddr + 0x04)
     let so_state    = _kread32H(socketAddr + 0x08)
     let so_options  = _kread32H(socketAddr + 0x10)
-    let so_proto    = _kreadPtrH(socketAddr + UInt64(numericCast(off_socket_so_proto)))
+    let so_proto    = _kreadPtrH(socketAddr + socketSoProtoOff)
     let so_pcb      = _kreadPtrH(socketAddr + 0x80)
-    let so_usecount = _kread32H(socketAddr + UInt64(numericCast(off_socket_so_usecount)))
+    let so_usecount = _kread32H(socketAddr + socketSoUsecntOff)
     let so_rcv_cc    = _kread32H(socketAddr + 0xA0)
     let so_rcv_hiwat = _kread32H(socketAddr + 0xA8)
     let so_snd_cc    = _kread32H(socketAddr + 0x120)
@@ -220,6 +242,14 @@ private func _socketInfoFromAddr(socketAddr: UInt64) -> String? {
 
 private func _socketDump(fd: Int32, mgr: laramgr) -> String? {
     guard mgr.dsready else { return nil }
+
+    let procPListLeNextOff = UInt64(off_proc_p_list_le_next)
+    let procPPidOff = UInt64(off_proc_p_pid)
+    let procPFdOff = UInt64(off_proc_p_fd)
+    let filedescFdOfilesOff = UInt64(off_filedesc_fd_ofiles)
+    let fileprocFpGlobOff = UInt64(off_fileproc_fp_glob)
+    let fileglobFgDataOff = UInt64(off_fileglob_fg_data)
+
     let ourProc = ds_get_our_proc()
     guard ourProc != 0 else { return nil }
 
@@ -229,21 +259,21 @@ private func _socketDump(fd: Int32, mgr: laramgr) -> String? {
     let pid = getpid()
     while ptr != 0 && !seen.contains(ptr) {
         seen.insert(ptr)
-        let p_pid = Int32(bitPattern: ds_kread32(ptr + UInt64(numericCast(off_proc_p_pid))))
+        let p_pid = Int32(bitPattern: ds_kread32(ptr + procPPidOff))
         if p_pid == pid { procPtr = ptr; break }
-        ptr = ds_kreadptr(ptr + UInt64(numericCast(off_proc_p_list_le_next)))
+        ptr = ds_kreadptr(ptr + procPListLeNextOff)
     }
     guard procPtr != 0 else { return nil }
 
-    let fdPtr = _kreadPtrH(procPtr + UInt64(numericCast(off_proc_p_fd)))
+    let fdPtr = _kreadPtrH(procPtr + procPFdOff)
     guard fdPtr != 0 else { return nil }
-    let ofilesPtr = _kreadPtrH(fdPtr + UInt64(numericCast(off_filedesc_fd_ofiles)))
+    let ofilesPtr = _kreadPtrH(fdPtr + filedescFdOfilesOff)
     guard ofilesPtr != 0 else { return nil }
     let fileprocPtr = _kreadPtrH(ofilesPtr + UInt64(fd) * 8)
     guard fileprocPtr != 0 else { return nil }
-    let fileglobPtr = _kreadPtrH(fileprocPtr + UInt64(numericCast(off_fileproc_fp_glob)))
+    let fileglobPtr = _kreadPtrH(fileprocPtr + fileprocFpGlobOff)
     guard fileglobPtr != 0 else { return nil }
-    let socketAddr = _kreadPtrH(fileglobPtr + UInt64(numericCast(off_fileglob_fg_data)))
+    let socketAddr = _kreadPtrH(fileglobPtr + fileglobFgDataOff)
     guard socketAddr != 0 else { return nil }
 
     let dumpSize = 0x200
@@ -266,10 +296,10 @@ private func _socketDump(fd: Int32, mgr: laramgr) -> String? {
         0xC0: "so_snd.sb_mbcnt", 0xC8: "so_snd.sb_mbmax",
         0xD0: "so_snd lowat/flags", 0xD8: "so_snd.sb_sel",
         0xE0: "so_snd.sb_mtx", 0xE8: "so_snd.sb_tstmp",
-        0xF0: "so_upcall/so_upcallarg", 0xF8: "so_cred",
-        0x100: "so_label", 0x108: "so_gencnt",
-        0x110: "so_flags", 0x118: "so_usecount",
-        0x120: "so_retaincnt", 0x128: "so_filter",
+        0xF0: "so_upcall/arg", 0xF8: "so_cred2",
+        0x100: "so_label2", 0x108: "so_gencnt2",
+        0x110: "so_flags2", 0x118: "so_usecount2",
+        0x120: "so_retaincnt2", 0x128: "so_filter2",
         0x130: "so_kern_ctl", 0x138: "so_acc_sas",
         0x140: "so_acc_sas_sz", 0x148: "so_ev_pcb",
         0x150: "so_ev_pcbarg", 0x158: "so_ev_state",
@@ -291,6 +321,14 @@ private func _socketDump(fd: Int32, mgr: laramgr) -> String? {
 
 private func _getSocketAddr(fd: Int, mgr: laramgr) -> UInt64? {
     guard mgr.dsready else { return nil }
+
+    let procPListLeNextOff = UInt64(off_proc_p_list_le_next)
+    let procPPidOff = UInt64(off_proc_p_pid)
+    let procPFdOff = UInt64(off_proc_p_fd)
+    let filedescFdOfilesOff = UInt64(off_filedesc_fd_ofiles)
+    let fileprocFpGlobOff = UInt64(off_fileproc_fp_glob)
+    let fileglobFgDataOff = UInt64(off_fileglob_fg_data)
+
     let ourProc = ds_get_our_proc()
     guard ourProc != 0 else { return nil }
 
@@ -300,20 +338,20 @@ private func _getSocketAddr(fd: Int, mgr: laramgr) -> UInt64? {
     let pid = getpid()
     while ptr != 0 && !seen.contains(ptr) {
         seen.insert(ptr)
-        let p_pid = Int32(bitPattern: ds_kread32(ptr + UInt64(numericCast(off_proc_p_pid))))
+        let p_pid = Int32(bitPattern: ds_kread32(ptr + procPPidOff))
         if p_pid == pid { procPtr = ptr; break }
-        ptr = ds_kreadptr(ptr + UInt64(numericCast(off_proc_p_list_le_next)))
+        ptr = ds_kreadptr(ptr + procPListLeNextOff)
     }
     guard procPtr != 0 else { return nil }
-    let fdPtr = _kreadPtrH(procPtr + UInt64(numericCast(off_proc_p_fd)))
+    let fdPtr = _kreadPtrH(procPtr + procPFdOff)
     guard fdPtr != 0 else { return nil }
-    let ofilesPtr = _kreadPtrH(fdPtr + UInt64(numericCast(off_filedesc_fd_ofiles)))
+    let ofilesPtr = _kreadPtrH(fdPtr + filedescFdOfilesOff)
     guard ofilesPtr != 0 else { return nil }
     let fileprocPtr = _kreadPtrH(ofilesPtr + UInt64(fd) * 8)
     guard fileprocPtr != 0 else { return nil }
-    let fileglobPtr = _kreadPtrH(fileprocPtr + UInt64(numericCast(off_fileproc_fp_glob)))
+    let fileglobPtr = _kreadPtrH(fileprocPtr + fileprocFpGlobOff)
     guard fileglobPtr != 0 else { return nil }
-    return _kreadPtrH(fileglobPtr + UInt64(numericCast(off_fileglob_fg_data)))
+    return _kreadPtrH(fileglobPtr + fileglobFgDataOff)
 }
 
 // MARK: – Registration

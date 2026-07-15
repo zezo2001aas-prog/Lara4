@@ -100,7 +100,7 @@ final class OmegaBootstrap {
         registerProcessExplorer()
         registerIPCExplorer()
         registerVFSExplorer()
-        registerMemoryExplorer()
+        // registerMemoryExplorer() // TODO: Implement OmegaExtendedL.swift or remove
         registerDebuggerCommands()
         registerSnapshotEngine()
     }

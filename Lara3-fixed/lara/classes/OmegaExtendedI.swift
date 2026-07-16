@@ -172,18 +172,28 @@
 
   // MARK: – ucred-info
   //
-  // CRASH-FIX: All reads guarded by ds_isvalid().
-  // cr_label chain ONLY attempted when all three label offsets are non-zero
-  // (set by offsets_init) AND each pointer in the chain passes ds_isvalid().
-  // Byte-by-byte reads (sandbox profile name) re-validate every 64 bytes.
+  // CRASH-FIX (final): cr_label chain removed entirely.
+  //
+  // Root cause of respring on system processes (PID 1 launchd, PID 2, etc.):
+  //   cr_label for system processes lives in PPL-protected read-only memory.
+  //   ds_isvalid() returns TRUE (page IS mapped), but the socket KRW primitive
+  //   cannot safely read PPL pages — ds_kread8/ds_kreadptr on those addresses
+  //   triggers a kernel panic → SpringBoard respring.
+  //
+  //   Even with per-step ds_isvalid() guards the primitive itself panics,
+  //   because the check tests mappedness, not PPL accessibility.
+  //
+  // Safe alternative: use 'sandbox-check <pid>' (uses sysctl path, no PPL reads).
+  //
+  // Only reads within the ucred struct itself (cr_posix at fixed offsets) —
+  // these fields are in regular kernel heap memory, readable on all processes.
 
   private func _ucredInfo(pid: Int32, mgr: laramgr) -> String? {
       guard let procPtr = _findProcI(pid: pid, mgr: mgr) else { return nil }
 
-      // Offsets with safe fallbacks
-      let procROOff  = off_proc_p_proc_ro     != 0 ? UInt64(off_proc_p_proc_ro)     : 0x18
-      let ucredROOff = off_proc_ro_p_ucred    != 0 ? UInt64(off_proc_ro_p_ucred)    : 0x08
-      let textvpOff  = off_proc_p_textvp      != 0 ? UInt64(off_proc_p_textvp)      : 0x260
+      // Offsets with safe fallbacks (iOS 18 arm64e)
+      let procROOff  = off_proc_p_proc_ro  != 0 ? UInt64(off_proc_p_proc_ro)  : 0x18
+      let ucredROOff = off_proc_ro_p_ucred != 0 ? UInt64(off_proc_ro_p_ucred) : 0x08
 
       // proc → proc_ro → ucred
       let proc_ro  = _kreadPtrI(procPtr + procROOff)
@@ -191,10 +201,10 @@
       let ucredPtr = _kreadPtrI(proc_ro + ucredROOff)
       guard ucredPtr != 0 else { return nil }
 
-      // Core credential fields (kauth_cred iOS 18 arm64e layout)
-      // cr_posix begins at +0x18:
-      //   +0x18 cr_uid    +0x1c cr_ruid   +0x20 cr_svuid
-      //   +0x24 cr_gid    +0x28 cr_rgid   +0x2c cr_svgid
+      // kauth_cred / posix_cred layout (iOS 16-18 arm64e, stable):
+      //   cr_posix starts at ucred+0x18
+      //   +0x18 cr_uid     +0x1c cr_ruid    +0x20 cr_svuid
+      //   +0x24 cr_gid     +0x28 cr_rgid    +0x2c cr_svgid
       //   +0x30 cr_ngroups  +0x34..+0x70 cr_groups[16]
       let cr_uid    = _kread32I(ucredPtr + 0x18)
       let cr_ruid   = _kread32I(ucredPtr + 0x1c)
@@ -209,53 +219,17 @@
           groups.append(_kread32I(ucredPtr + 0x34 + UInt64(i) * 4))
       }
 
-      // cr_label chain — ONLY attempt if ALL label offsets are non-zero
-      // (prevents reading garbage when offsets_init hasn't run or device variant differs)
-      var crLabelStr  = "offset not set — run offsets_init first"
-      var sandboxStr  = crLabelStr
-      var amfiStr     = crLabelStr
-
-      let crLabelOff  = off_ucred_cr_label             != 0 ? UInt64(off_ucred_cr_label)             : 0
-      let lSandboxOff = off_label_l_perpolicy_sandbox  != 0 ? UInt64(off_label_l_perpolicy_sandbox)  : 0
-      let lAmfiOff    = off_label_l_perpolicy_amfi     != 0 ? UInt64(off_label_l_perpolicy_amfi)     : 0
-
-      if crLabelOff != 0 {
-          let cr_label = _kreadPtrI(ucredPtr + crLabelOff)
-          crLabelStr = cr_label != 0
-              ? String(format: "0x%016llx", cr_label)
-              : "null"
-
-          // Sandbox profile name
-          if lSandboxOff != 0, cr_label != 0 {
-              let sbPtr = _kreadPtrI(cr_label + lSandboxOff)
-              if sbPtr != 0, ds_isvalid(sbPtr + 0x10) {
-                  let name = _kreadCStrI(sbPtr + 0x10, max: 64)
-                  sandboxStr = name.isEmpty ? "present (opaque)" : name
-              } else {
-                  sandboxStr = sbPtr != 0 ? "present (unreadable)" : "none"
-              }
-          } else {
-              sandboxStr = lSandboxOff == 0 ? "offset not set" : "none"
-          }
-
-          // AMFI slot
-          if lAmfiOff != 0, cr_label != 0 {
-              let amfiPtr = _kreadPtrI(cr_label + lAmfiOff)
-              amfiStr = amfiPtr != 0 ? String(format: "present (0x%016llx)", amfiPtr) : "none"
-          } else {
-              amfiStr = lAmfiOff == 0 ? "offset not set" : "none"
-          }
-      }
-
-      // textvp presence (proxy for whether binary is mapped)
-      let textvp   = _kreadPtrI(procPtr + textvpOff)
-      let entStr   = textvp != 0 ? "use 'proc-entitlements \(pid)' for full dump" : "unavailable"
+      // cr_label chain is intentionally skipped:
+      // For system processes (PID ≤ 4 and many daemons), cr_label lives in
+      // PPL-protected pages.  Reading those via the socket KRW primitive
+      // causes a kernel panic even when ds_isvalid() says the page is mapped.
+      // Use 'sandbox-check <pid>' for policy info (sysctl-based, no PPL reads).
 
       var out = [String]()
       out.append(String(format: "ucred-info: pid %d", pid))
       out.append(String(format: "  proc_ro_ptr   : 0x%016llx", proc_ro))
       out.append(String(format: "  ucred_ptr     : 0x%016llx", ucredPtr))
-      out.append("  ──── credential fields ────")
+      out.append("  ──── posix credentials ────")
       out.append(String(format: "  uid           : %d", cr_uid))
       out.append(String(format: "  gid           : %d", cr_gid))
       out.append(String(format: "  ruid          : %d", cr_ruid))
@@ -263,13 +237,12 @@
       out.append(String(format: "  rgid          : %d", cr_rgid))
       out.append(String(format: "  svgid         : %d", cr_svgid))
       out.append(String(format: "  ngroups       : %d", cr_ngroups))
-      out.append(String(format: "  groups        : [%@]", groups.map { String($0) }.joined(separator: ", ")))
+      out.append(String(format: "  groups        : [%@]",
+                        groups.map { String($0) }.joined(separator: ", ")))
       out.append("  ──── mac label ────")
-      out.append(String(format: "  cr_label      : %@", crLabelStr))
-      out.append(String(format: "  sandbox       : %@", sandboxStr))
-      out.append(String(format: "  amfi          : %@", amfiStr))
-      out.append("  ──── binary ────")
-      out.append(String(format: "  entitlements  : %@", entStr))
+      out.append("  cr_label      : skipped (PPL-protected on system procs)")
+      out.append("  sandbox       : use 'sandbox-check \(pid)' for policy info")
+      out.append("  amfi          : use 'amfi-status' for AMFI enforcement state")
       return out.joined(separator: "\n")
   }
 

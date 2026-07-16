@@ -61,32 +61,4 @@ name: Build Lara4 IPA
           with:
             name: release-ipa
             path: Lara3-fixed/build/lara.ipa
-
-        - name: Publish nightly release
-          if: github.event_name != 'pull_request'
-          env:
-            GH_TOKEN: ${{ github.token }}
-          run: |
-            set -euo pipefail
-            COMMITS=$(git log --since='24 hours ago' --pretty=format:'- %h %s (%an)' 2>/dev/null || true)
-            [ -z "$COMMITS" ] && COMMITS=$(git log -5 --pretty=format:'- %h %s (%an)')
-            NOTES_FILE=$(mktemp /tmp/notes.XXXXXX.md)
-            printf '## Lara4 Nightly Build\n\n' > "$NOTES_FILE"
-            printf '**Entitlements:** no-sandbox + proc_info-allow via ldid\n\n' >> "$NOTES_FILE"
-            printf '### Recent commits\n' >> "$NOTES_FILE"
-            printf '%s\n' "$COMMITS" >> "$NOTES_FILE"
-            if gh release view nightly >/dev/null 2>&1; then
-              gh release edit nightly \
-                --title "Nightly ($(date -u '+%Y-%m-%d %H:%M UTC'))" \
-                --notes-file "$NOTES_FILE" \
-                --prerelease
-            else
-              gh release create nightly \
-                --title "Nightly ($(date -u '+%Y-%m-%d %H:%M UTC'))" \
-                --notes-file "$NOTES_FILE" \
-                --prerelease
-            fi
-            gh release upload nightly Lara3-fixed/build/lara.ipa --clobber
-            rm -f "$NOTES_FILE"
-            echo "[OK] Nightly release updated"
   

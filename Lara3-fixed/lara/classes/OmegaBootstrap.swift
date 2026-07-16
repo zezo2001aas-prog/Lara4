@@ -61,6 +61,10 @@ private func findPidByBundleId(_ bundleId: String, mgr: laramgr) -> Int32? {
     return ProcessLayer.shared.find(matching: info.executable).first?.pid
 }
 
+// MARK: - csops syscall (for proc-entitlements kernel fallback)
+@_silgen_name("csops")
+func csops(_ pid: pid_t, _ ops: UInt32, _ useraddr: UnsafeMutableRawPointer, _ usersize: Int) -> Int32
+
 // MARK: - OmegaBootstrap
 
 final class OmegaBootstrap {

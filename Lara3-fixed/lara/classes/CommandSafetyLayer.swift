@@ -162,7 +162,7 @@ final class CommandSafetyLayer {
         if !exists && !mgr.dsready {
             return .blocked("PID " + String(pid) + " does not exist and KRW unavailable")
         }
-        if criticalPIDS.contains(pid) || (exists && info.pbi_uid == 0 && pid <= 100) {
+        if criticalPIDs.contains(pid) || (exists && info.pbi_uid == 0 && pid <= 100) {
             if systemProcCommands.contains(command) {
                 return .dangerous("CRITICAL: PID " + String(pid) + " is a system process. " + command + " on system processes can cause kernel panic or respring.")
             }

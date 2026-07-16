@@ -1,17 +1,16 @@
 name: Diagnostic
 
-  on:
-    workflow_dispatch:
-    push:
-      branches: [ main ]
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
 
-  jobs:
-    test-ubuntu:
-      runs-on: ubuntu-latest
-      steps:
-        - run: echo "ubuntu works"
-    test-macos:
-      runs-on: macos-latest
-      steps:
-        - run: echo "macos works"
-  
+jobs:
+  test-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "ubuntu works"
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - run: echo "macos works"

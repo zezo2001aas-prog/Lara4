@@ -69,7 +69,15 @@ final class CommandSafetyLayer {
             return validateKernelAddressCommand(command: command, arg: arg, mgr: mgr)
         }
 
-        if command.hasPrefix("proc-") || ["ucred-info", "task-info", "vmmap-k", "inject-root", "ipc-space", "fd-info", "socket-info"].contains(command) {
+        // Commands that require a PID (numeric) or process name argument
+        let pidCommands: Set<String> = [
+            "proc-cred", "proc-info", "proc-kill", "proc-signal",
+            "proc-suspend", "proc-resume", "proc-csflags", "proc-csflags-set",
+            "proc-entitlements", "proc-open-files", "proc-mem-info",
+            "ucred-info", "task-info", "vmmap-k", "inject-root",
+            "ipc-space", "fd-info", "socket-info", "socket-dump",
+        ]
+        if pidCommands.contains(command) {
             return validatePIDCommand(command: command, arg: arg, mgr: mgr)
         }
 

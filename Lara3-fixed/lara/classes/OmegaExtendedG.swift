@@ -375,24 +375,6 @@ private func _regPPL() {
             mgr.vfsready ? "yes" : "no", mgr.sbxready ? "yes" : "no"
         ))
     }
-OmegaCore.register("ppl-phase-report") { _, mgr in
-        guard mgr.dsready else { return .fail("ppl-phase-report: exploit not ready") }
-        let p1 = pm_phase1_fingerprint()
-        let p2 = pm_phase2_resolve_ucred()
-        let p3 = pm_phase3_write_root()
-        let uid = getuid()
-        return .ok(String(format:
-            "ppl-phase-report:\n" +
-            "  Phase 1 (physmap fingerprint) : %d  %@\n" +
-            "  Phase 2 (ucred via physmap)   : %d  %@\n" +
-            "  Phase 3 (write uid=0)         : %d  %@\n" +
-            "  Final uid                     : %d  %@",
-            p1, p1 == 0 ? "✔ pmap located" : "✖ pmap not found",
-            p2, p2 == 0 ? "✔ ucred resolved" : "✖ failed",
-            p3, p3 == 0 ? "✔ uid=0 written" : "✖ failed",
-            uid, uid == 0 ? "ROOT ✔" : "(not root)"
-        ))
-    }
 
     OmegaCore.register("ppl-phase-report") { _, mgr in
         guard mgr.dsready else { return .fail("ppl-phase-report: exploit not ready") }
@@ -434,25 +416,6 @@ OmegaCore.register("ppl-phase-report") { _, mgr in
             p2, p2Status,
             p3, p3Status,
             uid, uid == 0 ? "ROOT ✔️" : "NOT ROOT ✖️ (uid=\(uid))"
-        ))
-    }
-OmegaCore.register("ppl-phase-report") { _, mgr in
-        guard mgr.dsready else { return .fail("ppl-phase-report: not ready") }
-        let p1 = pm_phase1_fingerprint()
-        let p2 = pm_phase2_resolve_ucred()
-        let p3 = pm_phase3_write_root()
-        let uid = getuid()
-        let p1s = p1 == 0 ? "PASS" : "FAIL (\(p1))"
-        let p2s = p2 == 0 ? "PASS" : "FAIL (\(p2))"
-        let p3s = p3 == 0 ? "PASS" : "FAIL (\(p3))"
-        return .ok(String(format:
-            "Phase 1: %@\n" +
-            "Phase 2: %@\n" +
-            "Phase 3: %@\n" +
-            "uid:     %d\n" +
-            "---\n" +
-            "Fix:     offsets → fixoffsets → auto-ppl-breaker",
-            p1s, p2s, p3s, uid
         ))
     }
 OmegaCore.register("ppl-write-bypass") { rawArg, mgr in
@@ -568,29 +531,6 @@ OmegaCore.register("ppl-write-bypass") { rawArg, mgr in
         ))
     }
 
-    OmegaCore.register("ppl-bypass-strategy-planner") { _, mgr in
-        guard mgr.dsready else { return .fail("ppl-bypass-strategy-planner: not ready") }
-        let uid = getuid()
-        let pplBp = ppl_is_bypassed()
-        let p1 = pm_fingerprint_ok()
-        let enforce = amfi_get_mac_proc_enforce()
-        let next: String
-        if uid == 0 {
-            next = "cs-remove-all-restrictions"
-        } else if pplBp {
-            next = "set-all-ids-zero"
-        } else if enforce == 0xFFFFFFFF {
-            next = "offsets → fixoffsets"
-        } else if p1 {
-            next = "auto-ppl-breaker"
-        } else {
-            next = "offsets → fixoffsets → auto-ppl-breaker"
-        }
-        return .ok(String(format:
-            "uid: %d | ppl: %@ | physmap: %@\nNext: %@",
-            uid, pplBp ? "yes" : "no", p1 ? "yes" : "no", next
-        ))
-    }
 OmegaCore.register("ppl-bypass-strategy-planner") { _, mgr in
         guard mgr.dsready else { return .fail("ppl-bypass-strategy-planner: exploit not ready") }
         let uid   = getuid()
@@ -620,36 +560,6 @@ OmegaCore.register("ppl-bypass-strategy-planner") { _, mgr in
             lines.append("       Step 1: Run 'offsets' or 'fixoffsets' to resolve AMFI offset")
             lines.append("       Step 2: If offsets fail, this iOS version needs updated offsets")
             lines.append("       Step 3: Do NOT run amfi-disable-globally until offsets resolved")
-        } else if p1 {
-            lines.append("    1. physmap P1 OK → run ppl-phase-report")
-            lines.append("    2. Try: auto-ppl-breaker")
-        } else {
-            lines.append("    1. Run: offsets → fixoffsets (resolve mac_proc_enforce offset)")
-            lines.append("    2. Re-run: ppl-phase-report")
-            lines.append("    3. If Phase 1 still fails → device may need updated exploit")
-            lines.append("    4. Otherwise: auto-ppl-breaker → set-all-ids-zero")
-        }
-        return .ok(lines.joined(separator: "\n"))
-    }
-OmegaCore.register("ppl-bypass-strategy-planner") { _, mgr in
-        guard mgr.dsready else { return .fail("ppl-bypass-strategy-planner: exploit not ready") }
-        let uid   = getuid()
-        let pplBp = ppl_is_bypassed()
-        let p1    = pm_fingerprint_ok()
-        var lines = [
-            "ppl-bypass-strategy-planner:",
-            String(format: "  uid           : %d  %@", uid, uid == 0 ? "ROOT ✔" : "user"),
-            "  ppl_bypassed  : \(pplBp ? "yes ✔" : "no")",
-            "  physmap_ok    : \(p1 ? "yes ✔" : "no")",
-            "",
-            "  Recommended strategy:",
-        ]
-        if uid == 0 {
-            lines.append("    ✔ Already root — run cs-remove-all-restrictions to solidify")
-        } else if pplBp {
-            lines.append("    1. ppl already bypassed → set-all-ids-zero")
-            lines.append("    2. amfi-disable-globally")
-            lines.append("    3. cs-remove-all-restrictions")
         } else if p1 {
             lines.append("    1. physmap P1 OK → run ppl-phase-report")
             lines.append("    2. Try: auto-ppl-breaker")

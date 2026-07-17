@@ -405,23 +405,23 @@ OmegaCore.register("ppl-phase-report") { _, mgr in
         let p1Status: String
         switch p1 {
         case 0:  p1Status = "✔️ pmap located"
-        case -2: p1Status = "❌ precondition failed: mac_proc_enforce offset unknown or pmap not mapped (run 'offsets' first)"
-        case -1: p1Status = "❌ generic failure"
-        default: p1Status = "❌ error code \(p1)"
+        case -2: p1Status = "✖️ precondition failed: mac_proc_enforce offset unknown or pmap not mapped (run 'offsets' first)"
+        case -1: p1Status = "✖️ generic failure"
+        default: p1Status = "✖️ error code \(p1)"
         }
 
         let p2Status: String
         switch p2 {
         case 0:  p2Status = "✔️ ucred resolved"
-        case -1: p2Status = "❌ failed (physmap not ready or ucred offset unknown)"
-        default: p2Status = "❌ error code \(p2)"
+        case -1: p2Status = "✖️ failed (physmap not ready or ucred offset unknown)"
+        default: p2Status = "✖️ error code \(p2)"
         }
 
         let p3Status: String
         switch p3 {
         case 0:  p3Status = "✔️ uid=0 written"
-        case -1: p3Status = "❌ failed (PPL write blocked or previous phase failed)"
-        default: p3Status = "❌ error code \(p3)"
+        case -1: p3Status = "✖️ failed (PPL write blocked or previous phase failed)"
+        default: p3Status = "✖️ error code \(p3)"
         }
 
         return .ok(String(format:
@@ -433,7 +433,7 @@ OmegaCore.register("ppl-phase-report") { _, mgr in
             p1, p1Status,
             p2, p2Status,
             p3, p3Status,
-            uid, uid == 0 ? "ROOT ✔️" : "NOT ROOT ❌ (uid=\(uid))"
+            uid, uid == 0 ? "ROOT ✔️" : "NOT ROOT ✖️ (uid=\(uid))"
         ))
     }
 OmegaCore.register("ppl-phase-report") { _, mgr in
@@ -593,10 +593,10 @@ OmegaCore.register("ppl-bypass-strategy-planner") { _, mgr in
 
         var lines = [
             "ppl-bypass-strategy-planner:",
-            String(format: "  uid           : %d  %@", uid, uid == 0 ? "ROOT ✔️" : "user ❌"),
-            "  ppl_bypassed  : \(pplBp ? "YES ✔️" : "NO ❌")",
-            "  physmap_ok    : \(p1 ? "YES ✔️" : "NO ❌")",
-            "  amfi_enforce  : \(enforceUnknown ? "UNKNOWN ❌ (0xFFFFFFFF)" : (enforce == 0 ? "disabled ✔️" : "enforcing ⚠️"))",
+            String(format: "  uid           : %d  %@", uid, uid == 0 ? "ROOT ✔️" : "user ✖️"),
+            "  ppl_bypassed  : \(pplBp ? "YES ✔️" : "NO ✖️")",
+            "  physmap_ok    : \(p1 ? "YES ✔️" : "NO ✖️")",
+            "  amfi_enforce  : \(enforceUnknown ? "UNKNOWN ✖️ (0xFFFFFFFF)" : (enforce == 0 ? "disabled ✔️" : "enforcing ⚠️"))",
             "",
             "  Recommended strategy:",
         ]
@@ -608,7 +608,7 @@ OmegaCore.register("ppl-bypass-strategy-planner") { _, mgr in
             lines.append("    2. amfi-disable-globally")
             lines.append("    3. cs-remove-all-restrictions")
         } else if enforceUnknown {
-            lines.append("    ❌ CRITICAL: mac_proc_enforce offset unknown (0xFFFFFFFF)")
+            lines.append("    ✖️ CRITICAL: mac_proc_enforce offset unknown (0xFFFFFFFF)")
             lines.append("       Step 1: Run 'offsets' or 'fixoffsets' to resolve AMFI offset")
             lines.append("       Step 2: If offsets fail, this iOS version needs updated offsets")
             lines.append("       Step 3: Do NOT run amfi-disable-globally until offsets resolved")

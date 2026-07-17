@@ -475,8 +475,8 @@ private func _regPPL() {
             "        Panic = diagnosis. No panic = possible collision.",
             our_proc, raw_proc_ro, stripped_proc_ro, pac_tag,
             scratch, forged_ptr, stripped_ucred, current_uid, raw_proc_ro,
-            our_proc + off_proc_p_proc_ro, forged_ptr,
-            our_proc + off_proc_p_proc_ro, raw_proc_ro
+            our_proc + UInt64(off_proc_p_proc_ro), forged_ptr,
+            our_proc + UInt64(off_proc_p_proc_ro), raw_proc_ro
         ))
     }
 

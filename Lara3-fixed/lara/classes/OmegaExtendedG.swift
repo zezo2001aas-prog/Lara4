@@ -221,7 +221,7 @@ private func _regKTRR() {
             let name = withUnsafeBytes(of: reg.region_name) {
                 String(cString: $0.baseAddress!.assumingMemoryBound(to: CChar.self))
             }
-            lines.append(String(format: "  %-15@ 0x%016llx  0x%016llx   %@     %@     %@",
+            lines.append(String(format: "  %@ 0x%016llx  0x%016llx   %@     %@     %@",
                 name as NSString, reg.region_start, reg.region_end,
                 reg.is_ktrr ? "yes" : "no",
                 reg.is_ppl_zone ? "yes" : "no",
@@ -1262,7 +1262,7 @@ private func _regDiag() {
 
         lines.append("Strategy 3: tc_set_all_ids_zero()...")
         let r3 = tc_set_all_ids_zero()
-        if r3 == 0 {
+        if r3.code == 0 {
             lines.append("  ✅ SUCCESS")
             lines.append(String(format: "  getuid() = %d", getuid()))
             return .ok(lines.joined(separator: "\n"))

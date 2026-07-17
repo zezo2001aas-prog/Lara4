@@ -7,6 +7,7 @@
   #import <Foundation/Foundation.h>
 
   #import "darksword.h"
+#import "pac_utils.h"
 #import "OmegaCrashBarrier.h"
   #import "offsets.h"
   #import "utils.h"

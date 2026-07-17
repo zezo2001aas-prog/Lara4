@@ -598,7 +598,7 @@ OmegaCore.register("kinfo") { _, mgr in
             // 1. KRW Subsystem
             let krwReady = ds_is_ready()
             let krwState = krwReady ? "OPERATIONAL" : "FAILED"
-            lines.append(String(format: "[KRW]      State: %-20s  Backend: kernel r/w via exploit primitive", krwState))
+            lines.append(String(format: "[KRW]      State: %-20@  Backend: kernel r/w via exploit primitive", krwState as NSString))
 
             // 2. Pointer Integrity
             let kbase = ds_get_kernel_base()
@@ -612,18 +612,18 @@ OmegaCore.register("kinfo") { _, mgr in
             let kbaseState = (kbase != 0 && kbase & 0xFFF == 0) ? "VALID" : "INVALID"
             let pcbState = rwPCB != 0 ? "VALID" : "NULL"
 
-            lines.append(String(format: "[PTR]      proc: %-20s  0x%012llx", procState, ourProc))
-            lines.append(String(format: "           task: %-20s  0x%012llx", taskState, ourTask))
-            lines.append(String(format: "           kbase: %-19s  0x%016llx", kbaseState, kbase))
-            lines.append(String(format: "           slide: %-19s  0x%016llx", kslide != 0 ? "VALID" : "ZERO", kslide))
-            lines.append(String(format: "           rwpcb: %-19s  0x%012llx", pcbState, rwPCB))
+            lines.append(String(format: "[PTR]      proc: %-20@  0x%012llx", procState as NSString, ourProc))
+            lines.append(String(format: "           task: %-20@  0x%012llx", taskState as NSString, ourTask))
+            lines.append(String(format: "           kbase: %-19@  0x%016llx", kbaseState as NSString, kbase))
+            lines.append(String(format: "           slide: %-19@  0x%016llx", (kslide != 0 ? "VALID" : "ZERO") as NSString, kslide))
+            lines.append(String(format: "           rwpcb: %-19@  0x%012llx", pcbState as NSString, rwPCB))
 
             // 3. Privilege
             let uid = getuid()
             let gid = getgid()
             let euid = geteuid()
             let privState = uid == 0 ? "ROOT" : (euid == 0 ? "ELEVATED (euid=0)" : "UNPRIVILEGED")
-            lines.append(String(format: "[PRIV]     Level: %-20s  uid=%d  gid=%d  euid=%d", privState, uid, gid, euid))
+            lines.append(String(format: "[PRIV]     Level: %-20@  uid=%d  gid=%d  euid=%d", privState as NSString, uid, gid, euid))
 
             // 4. Protections
             let hasPAC = true  // A12+ always armed
@@ -651,7 +651,7 @@ OmegaCore.register("kinfo") { _, mgr in
             let keyOff3 = off_task_map
             let symState = (keyOff1 != 0 && keyOff2 != 0 && keyOff3 != 0) ? "RESOLVED" : "PARTIAL"
 
-            lines.append(String(format: "[OFFSETS]  State: %-20s  Resolver: %@", offsetsOK ? "LOADED" : "MISSING", symState))
+            lines.append(String(format: "[OFFSETS]  State: %-20@  Resolver: %@", (offsetsOK ? "LOADED" : "MISSING") as NSString, symState))
             if symState == "PARTIAL" {
                 lines.append(String(format: "           proc_ro=%u  ucred=%u  task_map=%u", keyOff1, keyOff2, keyOff3))
             }
@@ -937,14 +937,14 @@ OmegaCore.register("kinfo") { _, mgr in
                 return .fail("apps: unable to get app list")
             }
             let filter = arg.trimmingCharacters(in: .whitespaces).lowercased()
-            var lines = [String(format: "  %-45s  %s", "Bundle ID", "Name")]
+            var lines = [String(format: "  %-45@  %@", "Bundle ID" as NSString, "Name" as NSString)]
             lines.append("  " + String(repeating: "─", count: 70))
             for (bid, info) in list.sorted(by: { $0.key < $1.key }) {
                 let name = info.displayName.isEmpty
                     ? (info.bundleName.isEmpty ? info.executable : info.bundleName)
                     : info.displayName
                 if filter.isEmpty || bid.lowercased().contains(filter) || name.lowercased().contains(filter) {
-                    lines.append(String(format: "  %-45s  %@", bid, name))
+                    lines.append(String(format: "  %-45@  %@", bid as NSString, name))
                 }
             }
             if lines.count <= 2 { return .ok("no apps matched '\(filter)'") }

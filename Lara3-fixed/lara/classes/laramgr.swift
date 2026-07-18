@@ -305,9 +305,9 @@ final class laramgr: ObservableObject {
         return ds_kread64(address)
     }
 
-    func kwrite64(address: UInt64, value: UInt64) {
-        guard dsready, ds_is_ready() else { return }
-        ds_kwrite64(address, value)
+    func kwrite64(address: UInt64, value: UInt64) -> Bool {
+        guard dsready, ds_is_ready() else { return false }
+        return ds_kwrite64(address, value)
     }
 
     func kread32(address: UInt64) -> UInt32 {
@@ -315,9 +315,9 @@ final class laramgr: ObservableObject {
         return ds_kread32(address)
     }
 
-    func kwrite32(address: UInt64, value: UInt32) {
-        guard dsready, ds_is_ready() else { return }
-        ds_kwrite32(address, value)
+    func kwrite32(address: UInt64, value: UInt32) -> Bool {
+        guard dsready, ds_is_ready() else { return false }
+        return ds_kwrite32(address, value)
     }
     
     func panic() {

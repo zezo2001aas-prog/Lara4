@@ -48,7 +48,7 @@
 
   // ── Shared offset helpers ─────────────────────────────────────────────────────
 
-  private var _nextOff:   UInt64 { off_proc_p_list_le_next != 0 ? UInt64(off_proc_p_list_le_next) : 0x08 }
+  private var _nextOff:   UInt64 { UInt64(off_proc_p_list_le_next) }  // 0x0 is valid (le_next at offset 0)
   private var _pidOff:    UInt64 { off_proc_p_pid          != 0 ? UInt64(off_proc_p_pid)           : 0x60 }
   private var _nameOff:   UInt64 { off_proc_p_name         != 0 ? UInt64(off_proc_p_name)          : 0x56c }
   private var _procROOff: UInt64 { off_proc_p_proc_ro      != 0 ? UInt64(off_proc_p_proc_ro)       : 0x18 }
@@ -121,12 +121,7 @@
               list.append(entry)
           }
           guard ds_isvalid(ptr + _nextOff) else { break }
-          // SURGICAL FIX: p_list.le_next is an SMR pointer (epoch-tagged), NOT a PAC pointer.
-          // ds_kreadptr() applies xpaci() which strips PAC auth bits — but SMR uses
-          // low bits for epoch tags, not PAC. xpaci corrupts the address → random PID.
-          // Use ds_kread64() raw, then strip only the SMR epoch tag (low 4 bits).
-          let rawNext = ds_kread64(ptr + _nextOff)
-          ptr = rawNext & ~0xF  // strip SMR epoch tag, keep kernel VA
+          ptr = ds_kreadptr(ptr + _nextOff)
       }
 
       return list

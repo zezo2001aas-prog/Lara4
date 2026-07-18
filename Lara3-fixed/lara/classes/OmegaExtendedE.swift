@@ -121,7 +121,12 @@
               list.append(entry)
           }
           guard ds_isvalid(ptr + _nextOff) else { break }
-          ptr = ds_kreadptr(ptr + _nextOff)
+          // SURGICAL FIX: p_list.le_next is an SMR pointer (epoch-tagged), NOT a PAC pointer.
+          // ds_kreadptr() applies xpaci() which strips PAC auth bits — but SMR uses
+          // low bits for epoch tags, not PAC. xpaci corrupts the address → random PID.
+          // Use ds_kread64() raw, then strip only the SMR epoch tag (low 4 bits).
+          let rawNext = ds_kread64(ptr + _nextOff)
+          ptr = rawNext & ~0xF  // strip SMR epoch tag, keep kernel VA
       }
 
       return list

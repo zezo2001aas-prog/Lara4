@@ -387,7 +387,7 @@ final class ProcessLayer {
             let kpid = Int32(bitPattern: mgr.kread32(address: proc_ptr + pidOff))
             guard kpid > 0 else {
                 skipped += 1
-                proc_ptr = mgr.kread64(address: cleanPtr + nextOff) & ~0xF  // strip SMR epoch tag
+                proc_ptr = mgr.kread64(address: proc_ptr + nextOff)
                 continue
             }
 

@@ -114,6 +114,7 @@ final class OmegaBootstrap {
         // registerMemoryExplorer() // TODO: Implement OmegaExtendedL.swift or remove
         registerDebuggerCommands()
         registerSnapshotEngine()
+        RCBridge.registerAll()
     }
 
     // MARK: - Shell Basics

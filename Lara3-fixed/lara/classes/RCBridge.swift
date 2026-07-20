@@ -299,7 +299,6 @@ final class RCBridge {
                     )
                 }
             }
-            )
             guard tr == KERN_SUCCESS else {
                 return .fail(String(format: "rc-thread-create: thread_create_running failed (kr=0x%x)", tr))
             }

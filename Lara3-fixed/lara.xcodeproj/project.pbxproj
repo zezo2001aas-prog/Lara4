@@ -88,7 +88,6 @@
 		870C3797E7A6D39263AD81FD /* lara/funcs/getbmhash.swift in Sources */ = {isa = PBXBuildFile; fileRef = A722BB474B2FB2D28A86918E /* lara/funcs/getbmhash.swift */; };
 		88D90A0222197FB35F12DDD3 /* lara/views/tweaks/broken/darkboard/DarkBoardExploreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD419BC07B61A511797BEE0D /* lara/views/tweaks/broken/darkboard/DarkBoardExploreView.swift */; };
 		8911D2EA603C4A617A5E4290 /* lara/views/app/settings/CreditsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7931E79A7AB76F7E1689BF80 /* lara/views/app/settings/CreditsView.swift */; };
-		8B6049559E5B3168D9C807A7 /* ppl_physmap.h in Headers */ = {isa = PBXBuildFile; fileRef = 9256410E9B0871EA1C7025A1 /* ppl_physmap.h */; };
 		950854E730EB4C10CA4BD111 /* lara/classes/CommandResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEFF65E087288BE3F6E44013 /* lara/classes/CommandResult.swift */; };
 		970535CE5A52D1FF5FB41228 /* lara/PartyUI/App/Settings/GetLicenseDict.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E995D7F6AEB3A449DFC5686 /* lara/PartyUI/App/Settings/GetLicenseDict.swift */; };
 		990FDB35E765AC84B64E7556 /* lara/views/fm/FileInfoSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B321A544D69877082E383C6F /* lara/views/fm/FileInfoSheet.swift */; };
@@ -133,7 +132,6 @@
 		CDF80E3F8C1CCDF374A1C3AF /* lara/classes/OmegaExtendedC.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76CB277556F45840D384621D /* lara/classes/OmegaExtendedC.swift */; };
 		CFC1ACE9303A80B0CFD90FDC /* lara/views/tweaks/dirtyZero/dirtyZeroTweakArray.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100F9C2C9F6B9C51876657B2 /* lara/views/tweaks/dirtyZero/dirtyZeroTweakArray.swift */; };
 		D898E08C88AD353B1C2905A2 /* lara/classes/TerminalHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9370511F8A1775A618C84AED /* lara/classes/TerminalHistory.swift */; };
-		D99548F8BCB392B435C74EF9 /* ppl_physmap.m in Sources */ = {isa = PBXBuildFile; fileRef = 3B0741E4BA90A38AB596204E /* ppl_physmap.m */; };
 		DAAE0A506E6C393C9E7F20C4 /* lara/classes/OmegaExtendedB.swift in Sources */ = {isa = PBXBuildFile; fileRef = C973C384E6E947BD892351CA /* lara/classes/OmegaExtendedB.swift */; };
 		E0746B8FC83A9B3A3CE1F256 /* lara/PartyUI/UI/Lists/ThemedHeaderLabel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 890A2B327AE25B4DFCFCB9C0 /* lara/PartyUI/UI/Lists/ThemedHeaderLabel.swift */; };
 		E0FA4844DC8BD30BFFC6D5EB /* lara/funcs/resizetoapprox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D9AFA4E66AAD95005D2B572 /* lara/funcs/resizetoapprox.swift */; };
@@ -151,6 +149,8 @@
 		F75DD90ACC925A1E8E33C26C /* lara/lara.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24AD0E6BAD636D64ED3FCC1B /* lara/lara.swift */; };
 		FD585332D6DADD2332C9C09D /* lara/classes/OmegaExtendedD.swift in Sources */ = {isa = PBXBuildFile; fileRef = 428832808E521894755AF1BD /* lara/classes/OmegaExtendedD.swift */; };
 		FF2FDBFD31987C713A895616 /* lara/views/tweaks/dirtyZero/dirtyZeroView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 305CA19E03CD9FB6FE6BA2BD /* lara/views/tweaks/dirtyZero/dirtyZeroView.swift */; };
+		B68D58E8FB474369836CC642 /* tools_kernel_inspect.m in Sources */ = {isa = PBXBuildFile; fileRef = E06A8F57BF4A4287ACF6294F /* tools_kernel_inspect.m */; };
+		EEF5BE18CDEA44D198917440 /* tools_kernel_inspect.h in Headers */ = {isa = PBXBuildFile; fileRef = 42970B171E774301B2E8B718 /* tools_kernel_inspect.h */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -224,7 +224,6 @@
 		38F3ED5ED7860E72B1D4BFCE /* lara/views/app/ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = lara/views/app/ContentView.swift; sourceTree = "<group>"; };
 		3911361C77BC8563E3FBCEB3 /* lara/views/tweaks/FontPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = lara/views/tweaks/FontPicker.swift; sourceTree = "<group>"; };
 		395FFBE25AAB2A708773CF39 /* lara/PartyUI/UI/Indicators/TinyInfoPlatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = lara/PartyUI/UI/Indicators/TinyInfoPlatter.swift; sourceTree = "<group>"; };
-		3B0741E4BA90A38AB596204E /* ppl_physmap.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = ppl_physmap.m; path = lara/kexploit/pe/ppl_physmap.m; sourceTree = SOURCE_ROOT; };
 		3DD57EFCC6EDB49D17710DDF /* lara/views/tweaks/liquidglass/LiquidGlassView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = lara/views/tweaks/liquidglass/LiquidGlassView.swift; sourceTree = "<group>"; };
 		3F097073AD76847AD3F40228 /* lara/PartyUI/UI/Effects/OverlayBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = lara/PartyUI/UI/Effects/OverlayBackground.swift; sourceTree = "<group>"; };
 		3FF5DE0D16794B83EBDC8E75 /* lara/views/tweaks/sbcustomizer/SpringBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = lara/views/tweaks/sbcustomizer/SpringBoardView.swift; sourceTree = "<group>"; };
@@ -265,7 +264,6 @@
 		8DA39D8EFED8A3CB7091A9C3 /* lara/PartyUI/UI/Lists/SectionPlatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = lara/PartyUI/UI/Lists/SectionPlatter.swift; sourceTree = "<group>"; };
 		8F5C1F9B2D6A4E9D9F4B1A21 /* lara/kexploit/darksword.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = lara/kexploit/darksword.m; sourceTree = "<group>"; };
 		91996EE268831FE1258936E4 /* lara/PartyUI/App/WelcomeSheet/WelcomeSheetRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = lara/PartyUI/App/WelcomeSheet/WelcomeSheetRow.swift; sourceTree = "<group>"; };
-		9256410E9B0871EA1C7025A1 /* ppl_physmap.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ppl_physmap.h; path = lara/kexploit/pe/ppl_physmap.h; sourceTree = SOURCE_ROOT; };
 		9370511F8A1775A618C84AED /* lara/classes/TerminalHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = lara/classes/TerminalHistory.swift; sourceTree = "<group>"; };
 		93A98281B26FD8D08DCB4D15 /* lara/classes/zipmgr.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = lara/classes/zipmgr.swift; sourceTree = "<group>"; };
 		945FB546FF2C5640CEDD2192 /* lara/views/tweaks/ScreenTimeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = lara/views/tweaks/ScreenTimeView.swift; sourceTree = "<group>"; };
@@ -330,6 +328,8 @@
 		FF11EE22DD33CC44BB55AA66 /* lara/classes/OmegaExtendedG.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = lara/classes/OmegaExtendedG.swift; sourceTree = "<group>"; };
 		FF42CEB51EB9FEA0F619D74E /* lara/classes/HotPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = lara/classes/HotPlugin.swift; sourceTree = "<group>"; };
 		FFF6B427145AAFE6017688AF /* lara/PartyUI/UI/Indicators/PlainAlert.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = lara/PartyUI/UI/Indicators/PlainAlert.swift; sourceTree = "<group>"; };
+		E06A8F57BF4A4287ACF6294F /* tools_kernel_inspect.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = tools_kernel_inspect.m; path = lara/kexploit/pe/tools_kernel_inspect.m; sourceTree = SOURCE_ROOT; };
+		42970B171E774301B2E8B718 /* tools_kernel_inspect.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = tools_kernel_inspect.h; path = lara/kexploit/pe/tools_kernel_inspect.h; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -584,8 +584,6 @@
 				CC6842DE2F8311C300B08EB0 /* Frameworks */,
 				6FE242319EAFFE4AEAE734F7 /* stage1_root.m */,
 				C1E14BFEAC41CFC7AE7128AF /* stage1_root.h */,
-				3B0741E4BA90A38AB596204E /* ppl_physmap.m */,
-				9256410E9B0871EA1C7025A1 /* ppl_physmap.h */,
 			);
 			sourceTree = "<group>";
 		};
@@ -627,7 +625,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C64B423C8EDE86BB32397CE5 /* stage1_root.h in Headers */,
-				8B6049559E5B3168D9C807A7 /* ppl_physmap.h in Headers */,
+				EEF5BE18CDEA44D198917440 /* tools_kernel_inspect.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -806,6 +804,7 @@
 				AA11BB22CC33DD44EE55FF66 /* lara/classes/OmegaExtendedG.swift in Sources */,
 				BB00CC11DD22EE33FF44AA55 /* lara/kexploit/pe/tools_system.m in Sources */,
 				CC11DD22EE33FF44AA55BB66 /* lara/classes/OmegaCrashBarrier.m in Sources */,
+				B68D58E8FB474369836CC642 /* lara/kexploit/pe/tools_kernel_inspect.m in Sources */,
 				PL00000002000000000000002,
 				7C45CD1949D93C9A24476790 /* lara/classes/OmegaFS.swift in Sources */,
 				CB8B58ED5D3655D81E616D02 /* lara/classes/OmegaPlugin.swift in Sources */,
@@ -871,7 +870,6 @@
 				C199649A51BDF1058CED27F3 /* lara/views/tweaks/sbcustomizer/SBCustomizerHandler.swift in Sources */,
 				76C96635B8F154FEA91B2CB5 /* lara/views/tweaks/sbcustomizer/SpringBoardView.swift in Sources */,
 				290242F0824AC5CB3AA3386F /* stage1_root.m in Sources */,
-				D99548F8BCB392B435C74EF9 /* ppl_physmap.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

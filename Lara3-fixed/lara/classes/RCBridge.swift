@@ -31,8 +31,6 @@ final class RCBridge {
     @_silgen_name("ourproc")              static func ourproc() -> UInt64
     @_silgen_name("proclist")             static func proclist(_ search: UnsafePointer<CChar>, _ out_count: UnsafeMutablePointer<Int32>) -> UnsafeMutablePointer<proc_entry_t>?
     @_silgen_name("free_proclist")        static func free_proclist(_ list: UnsafeMutablePointer<proc_entry_t>)
-    @_silgen_name("xpc_connection_create_mach_service")
-    private static func _xpcCreateMachService(_ name: UnsafePointer<CChar>!, _ targetq: DispatchQueue?, _ flags: UInt64) -> xpc_connection_t!
     @_silgen_name("hexdump")              static func hexdump_c(_ data: UnsafeRawPointer, _ size: Int)
     @_silgen_name("procbyname")           static func procbyname(_ name: UnsafePointer<CChar>) -> UInt64
     @_silgen_name("procbypid")            static func procbypid(_ pid: pid_t) -> UInt64
@@ -486,54 +484,8 @@ final class RCBridge {
             let method = parts[1]
             let args = parts.count > 2 ? parts[2] : "{}"
 
-            let conn = RCBridge._xpcCreateMachService(
-                service,
-                DispatchQueue.global(qos: .userInitiated),
-                UInt64(XPC_CONNECTION_MACH_SERVICE_PRIVILEGED)
-            )
-            guard let conn = conn else {
-                return .fail("rc-xpc-send: xpc_connection_create_mach_service returned NULL")
-            }
-
-            let sem = DispatchSemaphore(value: 0)
-            var result = ""
-            var success = false
-
-            xpc_connection_set_event_handler(conn) { event in
-                if xpc_get_type(event) == XPC_TYPE_ERROR {
-                    if let desc = xpc_dictionary_get_string(event, XPC_ERROR_KEY_DESCRIPTION) {
-                    result = "XPC ERROR: " + String(cString: desc)
-                } else {
-                    result = "XPC ERROR: unknown"
-                }
-                }
-            }
-            xpc_connection_resume(conn)
-
-            let msg = xpc_dictionary_create(nil, nil, 0)
-            xpc_dictionary_set_string(msg, "method", method)
-            xpc_dictionary_set_string(msg, "args", args)
-
-            xpc_connection_send_message_with_reply(conn, msg, DispatchQueue.global(qos: .userInitiated)) { reply in
-                if xpc_get_type(reply) == XPC_TYPE_DICTIONARY {
-                    let desc = xpc_copy_description(reply)
-                    result = String(cString: desc)
-                    free(desc)
-                    success = true
-                } else if xpc_get_type(reply) == XPC_TYPE_ERROR {
-                    let desc = xpc_copy_description(reply)
-                    result = String(cString: desc)
-                    free(desc)
-                }
-                sem.signal()
-            }
-
-            let wait = sem.wait(timeout: .now() + 5)
-            xpc_connection_cancel(conn)
-
-            if wait == .timedOut {
-                return .fail("rc-xpc-send: timeout after 5s")
-            }
+            let result = rc_xpc_send_helper(service, method, args)
+            let success = !result.hasPrefix("XPC ERROR:")
 
             var out = "\n╔══════════════════════════════════════╗\n"
             out += "║  XPC Service Call                   ║\n"

@@ -614,13 +614,8 @@
               return .ok(String(format: "elevate: ✔ uid=0\n  before: %d  after: %d  method: amfi(%d)\n",
                                 uidBefore, uidAfter, r))
           }
-          let r2 = ppl_bypass(); let uidAfter2 = getuid()
-          if r2 == 0 || uidAfter2 == 0 {
-              return .ok(String(format: "elevate: ✔ uid=0 via ppl_bypass()\n  before: %d  after: %d\n",
-                                uidBefore, uidAfter2))
-          }
-          return .fail(String(format: "elevate: ✖ all failed\n  amfi: %d  ppl: %d  uid: %d\n",
-                              r, r2, getuid()))
+          return .fail(String(format: "elevate: ✖ all failed\n  amfi: %d  uid: %d\n",
+                              r, getuid()))
       }
 
       // ── help-kernel ───────────────────────────────────────────────────────────

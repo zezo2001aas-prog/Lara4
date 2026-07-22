@@ -636,8 +636,11 @@ OmegaCore.register("kinfo") { _, mgr in
 
             var sysInfo = utsname()
             uname(&sysInfo)
-            let machine = withUnsafePointer(to: &sysInfo.machine) {
-                $0.withMemoryRebound(to: CChar.self, capacity: 1) { String(cString: $0) }
+            let machine = withUnsafeBytes(of: sysInfo.machine) { raw in
+                if let base = raw.baseAddress?.assumingMemoryBound(to: CChar.self) {
+                    return String(cString: base)
+                }
+                return "unknown"
             }
 
             let krwReady = ds_is_ready()

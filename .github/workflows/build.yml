@@ -3,42 +3,85 @@ name: Build Lara4 IPA
 on:
   push:
     branches: [ main ]
+  pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: macos-latest
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Setup Xcode
-      uses: maxim-lobanov/setup-xcode@v1
-      with:
-        xcode-version: latest-stable
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
 
-    - name: Install ldid
-      run: |
-        brew install ldid
+      - name: Show Xcode version
+        run: xcodebuild -version
 
-    - name: Build IPA
-      run: |
-        cd Lara3-fixed
-        bash ipabuild.sh
+      - name: Install ldid
+        run: brew install ldid
 
-    - name: Upload IPA Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: Lara4-IPA
-        path: Lara3-fixed/build/*.ipa
-        retention-days: 30
+      - name: Build IPA
+        working-directory: Lara3-fixed
+        run: |
+          chmod +x ipabuild.sh
+          ./ipabuild.sh
 
-    - name: Upload Build Logs on Failure
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-logs
-        path: |
-          Lara3-fixed/build/**/*.log
-          Lara3-fixed/build/**/*.txt
+      - name: Verify IPA structure
+        working-directory: Lara3-fixed
+        run: |
+          echo "[*] IPA size:"
+          ls -lh build/lara.ipa
+          echo "[*] Payload contents:"
+          unzip -l build/lara.ipa | grep -E "\.app/|Frameworks/" | head -30
+          echo "[*] Entitlements in binary:"
+          unzip -p build/lara.ipa Payload/lara.app/lara > /tmp/lara_bin
+          ldid -e /tmp/lara_bin || true
+
+      - name: Upload xcodebuild log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: Lara3-fixed/build/xcodebuild.log
+          if-no-files-found: ignore
+
+      - name: Upload IPA artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-ipa
+          path: Lara3-fixed/build/lara.ipa
+
+      - name: Publish nightly release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          COMMITS=$(git log --since='24 hours ago' --pretty=format:'- %h %s (%an)' 2>/dev/null || true)
+          [ -z "$COMMITS" ] && COMMITS=$(git log -5 --pretty=format:'- %h %s (%an)')
+          NOTES_FILE=$(mktemp /tmp/notes.XXXXXX.md)
+          printf '## Lara4 Nightly Build\n\n**Entitlements:** no-sandbox + proc_info-allow via ldid\n\n### Recent commits\n' > "$NOTES_FILE"
+          printf '%s\n' "$COMMITS" >> "$NOTES_FILE"
+          if gh release view nightly >/dev/null 2>&1; then
+            gh release edit nightly \
+              --title "Nightly ($(date -u '+%Y-%m-%d %H:%M UTC'))" \
+              --notes-file "$NOTES_FILE" --prerelease
+          else
+            gh release create nightly \
+              --title "Nightly ($(date -u '+%Y-%m-%d %H:%M UTC'))" \
+              --notes-file "$NOTES_FILE" --prerelease
+          fi
+          gh release upload nightly Lara3-fixed/build/lara.ipa --clobber
+          rm -f "$NOTES_FILE"
+          echo "[OK] release updated"
